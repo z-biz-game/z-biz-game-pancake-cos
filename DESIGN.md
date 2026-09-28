@@ -173,4 +173,7 @@ node 里量出来的表要能在 Chrome 里逐字节复现，否则 `[table]` �
 | `npm test`（六套） | 431 条断言，1.6 s，0 失败 |
 | `bash tools/verify.sh`（双形态） | 每形态 13 腿 / 388 条，0 失败；整跑 41 s |
 | 稳定性 | 同一命令连跑两遍，逐腿条数完全一致（15/22/28/44/32/45/49/18/16/22/45/25/27） |
+| 远端 `cf1597a` | Actions：CI 与 Deploy to GitHub Pages 两个 workflow 均 `completed / success`；CI 的 11 + 7 个 step 全 success |
+| 已部署站点 | `BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh` → `shape=custom: 13/13 legs · 388 checks · 0 failed` |
+| runner 自己的条数 | **没取到**：jobs raw log 这一轮先是 TLS 抖、换签名 URL 又 403，所以只引上面的 step 状态，不代 runner 报条数 |
 | 出货规模 | 6 档 23 关；普通最重八层，焦边最重六层 |

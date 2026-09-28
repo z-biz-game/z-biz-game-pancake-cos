@@ -9,9 +9,12 @@
 
 本文里的数字只有两类来源：仓里读得到的代码，和 2026-09-28 那一轮全绿跑出来的读数（node v26.8.1 /
 macOS 26.6.2 / Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs --check`、
-`npm test`（六套 61 / 141 / 92 / 49 / 33 / 48 条）、`bash tools/verify.sh`（双 URL 形态各 13 腿
-388 条）。同一份闸连跑两遍，逐腿条数一致，两次都 `=== ALL GREEN ===`。CI 的 unit job 跑在 Node 20、
-browser job 跑在 Node 22，那两个版本上的第一手证据是 CI 那一跑，本机没有装 20 或 22。
+`npm test`（六套 61 / 148 / 92 / 49 / 33 / 48 条）、`bash tools/verify.sh`（双 URL 形态各 13 腿
+388 条）。同一份闸连跑两遍，逐腿条数一致，两次都 `=== ALL GREEN ===`。出货那一次（commit `cf1597a`）
+远端两层也各自绿过：Actions 上 CI 与 Pages 两个 workflow 均 `completed / success`，把同一个闸指向
+已部署站点（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/`）跑出
+`shape=custom: 13/13 legs · 388 checks · 0 failed`。CI 的 unit job 跑在 Node 20、
+browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑，本机没有装 20 或 22。
 
 **代码 > 本文档**：本文与 `js/`、`tools/` 冲突时，以代码和它跑出来的输出为准。
 
