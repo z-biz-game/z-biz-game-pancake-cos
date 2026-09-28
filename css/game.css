@@ -1,0 +1,552 @@
+/* Tokens first: every colour, radius and duration in this file comes from a custom property, so the
+   palette is one edit and prefers-reduced-motion has something to switch off. The gate reads a few
+   of these by name (see tools/scenarios.js @theme) and fails if a rule stops using them.
+   Exactly two palettes exist and both hang off a data attribute: js/theme.js resolves 'auto' to
+   light or dark before painting, so there is no media-query copy that can drift from the override. */
+:root,
+:root[data-theme='dark'] {
+  --pancake-plain: #e8b463;
+  --pancake-plain-2: #d79a45;
+  --pancake-burnt: #7d4a1e;
+  --pancake-edge: #5c3413;
+  --pancake-syrup: #b3541e;
+  --plate: #6b4a1e;
+  --stack-line: #000000;
+  --label-ink: #140e08;
+  --press-light: #ffffff;
+  --bg: #1b1712;
+  --bg-2: #241e18;
+  --panel: #2c251d;
+  --panel-2: #362d23;
+  --ink: #f3e7d3;
+  --ink-dim: #bda887;
+  --ink-faint: #8a775e;
+  --good: #79c06a;
+  --warn: #e5b93c;
+  --bad: #e0705a;
+  --line: #4a3d2f;
+  --radius: 14px;
+  --radius-s: 9px;
+  --dur: 220ms;
+  --dur-flip: 340ms;
+  --pad: 16px;
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+  --font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* The cream scheme is a real second palette, not a lightbox over the dark one: the plate has to read
+   on a light panel and the accents have to clear a light background. The canvas paints from these
+   too (js/view.js draws --plate / --ink-dim / --bad), so tools/scenarios.js @theme can tell a swap
+   that moved pixels from one that only moved an attribute. The pancake colours do not change: a
+   pancake is the same object under both lamps. */
+:root[data-theme='light'] {
+  --bg: #f5ece0;
+  --bg-2: #ede0cf;
+  --panel: #fff8ee;
+  --panel-2: #f3e6d5;
+  --ink: #2a2119;
+  --ink-dim: #6d5b47;
+  --ink-faint: #93806a;
+  --line: #d9c5a8;
+  --shadow: 0 10px 24px rgba(90, 65, 30, 0.18);
+  --plate: #a8763a;
+  --stack-line: #6d5b47;
+  --press-light: #fffdf6;
+  --good: #3d7a35;
+  --warn: #a8761c;
+  --bad: #b8402c;
+}
+
+/* The one rule that makes `hidden` mean hidden: any section below sets its own display, and a
+   `display:grid` on a [hidden] element wins over the UA sheet and shows it anyway. */
+[hidden] {
+  display: none !important;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 62%);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app {
+  flex: 1;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 var(--pad) 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 6px;
+}
+
+#title-block h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+}
+
+#title-block h1 span {
+  font-size: 12px;
+  color: var(--ink-faint);
+  letter-spacing: 0.22em;
+}
+
+#subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+#topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.icon,
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: transform var(--dur) ease, background var(--dur) ease, border-color var(--dur) ease;
+}
+
+.icon {
+  width: 38px;
+  height: 34px;
+  padding: 0;
+}
+
+button:hover {
+  background: var(--panel-2);
+}
+
+button:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+}
+
+button[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button[aria-pressed="false"] {
+  color: var(--ink-faint);
+  border-color: var(--line);
+}
+
+.screen {
+  display: none;
+}
+
+.screen.on {
+  display: block;
+  animation: rise var(--dur) ease;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+h2 {
+  font-size: 17px;
+  margin: 10px 0 6px;
+}
+
+h3 {
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+
+.lede,
+.promise,
+.note {
+  font-size: 13px;
+  line-height: 1.72;
+  color: var(--ink-dim);
+  margin: 6px 0;
+}
+
+.promise {
+  border-left: 3px solid var(--pancake-syrup);
+  padding-left: 10px;
+  color: var(--ink);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.tier {
+  margin: 14px 0 0;
+  padding: 10px 12px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.tier-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tier-head .idx {
+  font-family: var(--mono);
+  color: var(--pancake-syrup);
+  font-size: 12px;
+}
+
+.tier-note {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 2px 0 8px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.card {
+  text-align: left;
+  padding: 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.35;
+}
+
+.card .cid {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.card .cmeta {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.card .cmeta b {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.card.done {
+  border-color: var(--good);
+}
+
+.card.done .cmeta b {
+  color: var(--good);
+}
+
+.card[data-current="1"] {
+  background: var(--panel-2);
+  border-color: var(--pancake-syrup);
+}
+
+#random-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+#seed-line {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+/* ---------- board ---------- */
+
+#hud {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(4, 1fr);
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.hud-cell {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 6px 8px;
+  min-width: 0;
+}
+
+.hud-k {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.hud-v {
+  display: block;
+  font-family: var(--mono);
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#hud-over.bad {
+  color: var(--bad);
+}
+
+#hud-over.good {
+  color: var(--good);
+}
+
+#board-wrap {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+
+#board {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: manipulation;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+#board:focus-visible {
+  outline: 3px solid var(--warn);
+  outline-offset: -3px;
+}
+
+#kbd-hint {
+  margin: 4px 2px 0;
+  font-size: 11px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}
+
+#board.shake {
+  animation: shake 320ms ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  22% { transform: translateX(-7px); }
+  46% { transform: translateX(6px); }
+  70% { transform: translateX(-3px); }
+}
+
+#hint-line {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  right: 12px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--warn);
+  min-height: 18px;
+  /* It sits over the top of the canvas. Without this the live region would eat the pointer events
+     aimed at the shallowest pancake, and the tap would land as a miss. */
+  pointer-events: none;
+}
+
+#toast {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--bad);
+  color: var(--ink);
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity var(--dur) ease;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+
+#toast.on {
+  opacity: 1;
+}
+
+#controls,
+.controls {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#controls button,
+.controls button {
+  position: relative;
+  padding: 10px 6px;
+}
+
+#controls .sub {
+  display: block;
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
+}
+
+#btn-hint {
+  border-color: var(--pancake-syrup);
+}
+
+details {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--panel);
+}
+
+summary {
+  cursor: pointer;
+  padding: 8px 11px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.details-body {
+  padding: 0 11px 10px;
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+#move-log {
+  margin: 6px 0 0;
+  padding: 0 0 0 18px;
+  font-family: var(--mono);
+  font-size: 12px;
+  max-height: 168px;
+  overflow: auto;
+}
+
+#move-log li.bad {
+  color: var(--bad);
+}
+
+#move-log li.good {
+  color: var(--good);
+}
+
+#win-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+
+#win-stats > div {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 8px 10px;
+}
+
+#win-stats dt {
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.1em;
+}
+
+#win-stats dd {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 17px;
+}
+
+.stars {
+  color: var(--warn);
+  letter-spacing: 0.14em;
+}
+
+#foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+#foot a {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 520px) {
+  #hud {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  #controls,
+  .controls {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* A phone has no arrow keys, so the line would be a lie about controls that do not exist. */
+  #kbd-hint {
+    display: none;
+  }
+}
+
+/* The flip animation is drawn on canvas; this only governs whether the DOM transitions run. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 1ms;
+    --dur-flip: 1ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "pancake",
+  "version": "1.0.0",
+  "description": "烙饼 Pancake — 前缀翻转排序. 每一关的 par 是把整个状态图做完一次广度优先后量出来的: 出货关卡最重的一摞是 8 层, 40 320 个盘子序全部访问一遍, 最短步数不是启发式, 是查表; 测试里另验 9 层 362 880 与六层焦边 46 080.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.cjs",
+    "dev": "node server.cjs 5266",
+    "bake": "node tools/bake.mjs",
+    "check:data": "node tools/bake.mjs --check",
+    "test": "for f in test/*.test.mjs; do node \"$f\" || exit 1; done",
+    "verify": "bash tools/verify.sh",
+    "check": "for f in js/*.js js/*/*.js; do node --check \"$f\" || exit 1; done && node --check server.cjs && for f in tools/*.mjs tools/*.cjs test/*.mjs; do node --check \"$f\" || exit 1; done && echo OK"
+  },
+  "keywords": [
+    "game",
+    "puzzle",
+    "pancake",
+    "prefix-reversal",
+    "sorting",
+    "optimal",
+    "web"
+  ],
+  "author": "z-biz-game",
+  "license": "MIT"
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>烙饼 · PANCAKE — 前缀翻转排序</title>
+<meta name="description" content="把一摞烙饼按大小叠整齐：一次只能从底下铲起最上面若干张、整段翻面。每一关的 par 是把整个状态图做完一次广度优先后量出来的，不是估计。">
+<link rel="stylesheet" href="css/game.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='20' width='26' height='6' rx='3' fill='%23e0a458'/%3E%3Crect x='6' y='13' width='20' height='6' rx='3' fill='%23c9863c'/%3E%3Crect x='9' y='6' width='14' height='6' rx='3' fill='%23a86a28'/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <button id="btn-menu" class="icon" type="button" aria-label="关卡表">☰</button>
+    <div id="title-block">
+      <h1>烙饼 <span lang="en">PANCAKE</span></h1>
+      <p id="subtitle">前缀翻转排序 · 每关 par 都是量出来的</p>
+    </div>
+    <div id="topbar-actions">
+      <button id="btn-theme" class="icon" type="button" aria-label="配色：自动 / 亮 / 暗" title="配色">◐</button>
+      <button id="btn-sound" class="icon" type="button" aria-pressed="true" aria-label="音效开关" title="音效">♪</button>
+    </div>
+  </header>
+
+  <!-- 关卡表 -->
+  <section id="menu" class="screen" aria-labelledby="menu-h">
+    <h2 id="menu-h">关卡表</h2>
+    <p class="lede">
+      一摞饼，大小各不相同。一次操作只能把铲子插到某张饼下面，把<strong>它和它上面所有的饼</strong>
+      一起整段翻回来。目标是从小到大（小的在顶上）。焦边关卡里每张饼有一面烙焦了，
+      翻动会把它们一并翻面，最后必须焦面朝下。
+    </p>
+    <p class="promise">
+      这里的 <code>par</code> 不是"某个解法用了几步"，而是把那一级全部局面（三层 6 个、八层 40 320 个、
+      六层焦边 46 080 个）做完一次广度优先之后的真下界；闸口每次复跑都会重算一遍。
+      提示按同一张表给出，所以它是答案而不是暗示 —— 用过提示的这一关会一直标着"带提示"，也不算通关。
+    </p>
+    <div id="tier-list"></div>
+    <p id="menu-note" class="note" hidden></p>
+    <div id="random-block">
+      <h3>随机一局</h3>
+      <p class="note">按上面同样的口径出题、同样现算 par；种子写进地址栏，可以原样复现给另一个人。</p>
+      <div id="random-buttons"></div>
+      <p id="seed-line"><code id="seed-shown">—</code></p>
+    </div>
+  </section>
+
+  <!-- 对局 -->
+  <main id="board-screen" class="screen" aria-labelledby="level-name">
+    <div id="hud">
+      <div class="hud-cell"><span class="hud-k">关卡</span><span class="hud-v" id="level-name">—</span></div>
+      <div class="hud-cell"><span class="hud-k">par</span><span class="hud-v" id="hud-par">—</span></div>
+      <div class="hud-cell"><span class="hud-k">步数</span><span class="hud-v" id="hud-moves">0</span></div>
+      <div class="hud-cell"><span class="hud-k">偏离</span><span class="hud-v" id="hud-over">—</span></div>
+      <div class="hud-cell"><span class="hud-k">最佳</span><span class="hud-v" id="hud-best">—</span></div>
+    </div>
+
+    <div id="board-wrap">
+      <canvas id="board" width="620" height="460" role="img" tabindex="0"
+              aria-label="一摞烙饼。点某张饼下方把铲子插进去，翻起它和它上面的所有饼。键盘用上下键选深度、回车翻。"></canvas>
+      <p id="kbd-hint" class="note">↑ 选深度 · Enter / 空格 翻 · U 撤销 · R 重来 · H 提示</p>
+      <p id="hint-line" aria-live="polite"></p>
+      <p id="toast" role="status" aria-live="assertive"></p>
+    </div>
+
+    <div id="controls">
+      <button id="btn-undo" type="button">撤销</button>
+      <button id="btn-restart" type="button">重来</button>
+      <button id="btn-hint" type="button">提示<span class="sub">交出最优首步</span></button>
+      <button id="btn-next" type="button">下一关</button>
+    </div>
+
+    <details id="how">
+      <summary>这一步为什么行 / 不行</summary>
+      <div class="details-body">
+        <p id="explain">把铲子插到某张饼下面：那张饼和它上面的一切会整段倒过来。
+          翻动的张数写在饼的左边。</p>
+        <ul id="move-log"></ul>
+      </div>
+    </details>
+  </main>
+
+  <!-- 收局 -->
+  <section id="win" class="screen" aria-labelledby="win-h">
+    <h2 id="win-h">叠好了</h2>
+    <dl id="win-stats"></dl>
+    <p id="win-note" class="note"></p>
+    <div class="controls">
+      <button id="btn-replay" type="button">再来一次</button>
+      <button id="btn-after-win" type="button">下一关</button>
+      <button id="btn-menu-2" type="button">关卡表</button>
+    </div>
+  </section>
+
+  <footer id="foot">
+    <span id="claim">零依赖 · 纯 ES module · par 由全图广度优先量出</span>
+    <a href="https://github.com/z-biz-game/z-biz-game-pancake-cos" rel="license">源码</a>
+  </footer>
+</div>
+<!-- one boot script; the whole module graph is static so a Pages prefix cannot break it -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

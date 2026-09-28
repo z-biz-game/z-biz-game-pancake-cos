@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: syntax + engine guarantees
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No npm install: the game has zero runtime dependencies, and pulling a package manager into
+      # CI to prove nothing is how a repo starts failing on a network flake.
+      - name: Syntax check every source
+        run: |
+          for f in $(git ls-files 'js/*.js' 'js/*/*.js'); do node --check "$f" || exit 1; done
+          node --check server.cjs
+          for f in $(git ls-files 'tools/*.mjs' 'tools/*.cjs' 'test/*.mjs'); do node --check "$f" || exit 1; done
+
+      # The layering invariant: `js/` ships to the browser, `tools/` does not. A runtime module
+      # reaching into tools/ is either a 404 in production or bench code served as product code, and
+      # then no gate below can be trusted to mean "the shipped bundle is the tested code".
+      - name: js/ never imports tools/
+        run: |
+          if grep -rnE "(import|export)[^;]*from '[^']*tools/" js/ ; then
+            echo '::error::运行时模块（js/）去够了 tools/ —— 分层又倒了'
+            exit 1
+          fi
+
+      # The promise of this repo, checked as data: every shipped par / starts / detour / stack /
+      # burnt-side print is re-derived from a fresh exhaustive BFS of that (n, mode). A row whose
+      # stored number disagrees with the graph is a hard failure, and a tier whose predicate cannot
+      # fill its quota throws rather than getting relaxed.
+      - name: Level table is still measured (bake --check)
+        run: node tools/bake.mjs --check
+
+      # Six suites, 424 assertions locally on 2026-09-28 (game 61 · graph 141 · library 92 ·
+      # perms 49 · rules 33 · store 48). The graph suite is the expensive one: it walks n=1..9
+      # plain (up to 362 880 positions) and n=2..7 burnt against the published diameters.
+      - name: Engine and page-model suites
+        run: |
+          for f in $(git ls-files 'test/*.test.mjs'); do node "$f" || exit 1; done
+
+      - name: Entry files exist
+        run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html && grep -q 'css/game.css' index.html
+
+  # The browser gate is where the four promises stop being prose. It runs BOTH URL shapes in one
+  # invocation (root, and the Pages shape /<repo>/ served through a symlinked document root), and
+  # only the second one can see an absolute '/js/…' specifier resolve to a 404. Measured locally on
+  # 2026-09-28: 13 legs × 388 checks per shape, 0 failed, whole run 40 s.
+  browser:
+    name: real browser gate (both URL shapes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        # 22, not the 20 the check job uses: tools/playtest.cjs is a raw CDP driver written against
+        # Node's global WebSocket/fetch, which only exist from 22 on. On 20 the first attach dies
+        # with "WebSocket is not defined" and the job goes red before a single assertion runs.
+        with:
+          node-version: 22
+      # ubuntu-latest ships google-chrome on PATH, which is what tools/verify.sh looks for after the
+      # two macOS bundle paths. No install step: apt/dpkg on a pinned image is a flake source, and a
+      # step that can die of networking would read as "the game is broken" when nothing about the
+      # game changed.
+      #
+      # The mobile leg DOES override the viewport, but through Emulation.setDeviceMetricsOverride
+      # inside the same CDP session that runs the leg (verify.sh passes EMULATE= to playtest.cjs),
+      # so it needs no xorg and no window manager. Do NOT add --use-gl=angle --use-angle=swiftshader:
+      # several legs read canvas pixels back (--plate, --pancake-burnt), and a software rasteriser
+      # makes them lie.
+      - name: Browser gate (root + prefix)
+        env:
+          # verify.sh's own watchdog default. The local both-shape run is 40 s, so this is headroom
+          # for a shared runner, not a budget the gate is graded against — raising it cannot turn a
+          # red gate green, it only stops the watchdog killing a run that is merely slow.
+          WD_TIMEOUT: 900
+        run: bash tools/verify.sh
