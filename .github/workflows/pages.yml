@@ -21,12 +21,14 @@ jobs:
       - uses: actions/checkout@v4
       # No bundler: the game ships plain ES modules, so the site is a file copy. Only these paths
       # are reachable from index.html — keeping the server, the gate harness, the tests and the docs
-      # out of the artifact also keeps `path: .` from uploading the whole repo.
+      # out of the artifact also keeps `path: .` from uploading the whole repo. icons/, art/, the
+      # manifest and sw.js are on that list because index.html reaches every one of them: a PWA
+      # whose icons 404 on Pages is installable at home and nowhere else.
       - name: Assemble static site
         run: |
           mkdir _site
-          cp index.html _site/
-          cp -r css js _site/
+          cp index.html manifest.webmanifest sw.js _site/
+          cp -r css js icons art _site/
       # Action versions are the ones that actually exist: configure-pages@v5 /
       # upload-pages-artifact@v3 / deploy-pages@v4. The older triple (v3/v1/v2) 404s on the
       # marketplace while the run still reports green, which is how a deploy silently stops

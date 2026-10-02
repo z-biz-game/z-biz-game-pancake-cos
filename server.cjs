@@ -12,6 +12,9 @@ const TYPES = {
   '.cjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  // Chrome refuses to parse a manifest served as octet-stream, so the local server has to say the
+  // same thing GitHub Pages says — otherwise "installable" is only ever true in production.
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',

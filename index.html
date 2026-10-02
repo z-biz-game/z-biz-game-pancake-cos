@@ -5,8 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>烙饼 · PANCAKE — 前缀翻转排序</title>
 <meta name="description" content="把一摞烙饼按大小叠整齐：一次只能从底下铲起最上面若干张、整段翻面。每一关的 par 是把整个状态图做完一次广度优先后量出来的，不是估计。">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+<link rel="icon" type="image/png" sizes="96x96" href="icons/favicon-96.png">
+<!-- iOS 只吃无 alpha 的 180px 位图：icons/apple-touch-icon.png 由 assets/gen/make_art.py 出。 -->
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1b1712">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="烙饼">
+<!-- 爬虫不解相对地址，所以社交卡这一张写的是部署后的绝对 URL；图本身在 art/og-1200x630.png。 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="烙饼 PANCAKE — 前缀翻转排序">
+<meta property="og:description" content="一铲翻起最上面若干张饼、整段翻回来，把它们按大小叠整齐。每关的 par 都是全图广度优先量出来的下界。">
+<meta property="og:image" content="https://z-biz-game.github.io/z-biz-game-pancake-cos/art/og-1200x630.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="css/game.css">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='20' width='26' height='6' rx='3' fill='%23e0a458'/%3E%3Crect x='6' y='13' width='20' height='6' rx='3' fill='%23c9863c'/%3E%3Crect x='9' y='6' width='14' height='6' rx='3' fill='%23a86a28'/%3E%3C/svg%3E">
 </head>
 <body>
 <div id="app">
@@ -99,6 +117,7 @@
   </footer>
 </div>
 <!-- one boot script; the whole module graph is static so a Pages prefix cannot break it -->
+<script src="js/sw-register.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
