@@ -11,6 +11,10 @@
 const PAD_X = 26;
 const TOP_PAD = 34;
 const BOT_PAD = 26;
+// iOS 的拇指下限是 44pt，这里按 CSS px 同一尺度用。画布只在 0.72 比例给的高度里排饼：
+// 桌面 728px 宽时行距顶到 46px 够用，380px 手机上 8 层只剩 22.75px —— 那才是点 A 打 B 的来源。
+// 所以 measure() 只在"排不下"时长高画布，本来就够的关卡（n=3 手机上行距 46）比例不动。
+const MIN_HIT = 44;
 
 export function createView(canvas, opts = {}) {
   const ctx = canvas.getContext('2d');
@@ -28,7 +32,11 @@ export function createView(canvas, opts = {}) {
     const box = canvas.getBoundingClientRect();
     const dpr = Math.max(1, Math.min(3, (typeof window !== 'undefined' && window.devicePixelRatio) || 1));
     const w = Math.max(240, Math.round(box.width || canvas.width));
-    const h = Math.max(200, Math.round((box.width || 620) * 0.72));
+    const aspect = Math.round(w * 0.72);
+    // 0.72 is the shape the layout gate measures; a stack that cannot fit its thumb rows inside it
+    // grows the canvas instead, so the rows never shrink below MIN_HIT.
+    const need = TOP_PAD + BOT_PAD + Math.max(0, geom.n) * MIN_HIT;
+    const h = Math.max(200, aspect, need);
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     canvas.style.height = h + 'px';
@@ -204,19 +212,30 @@ export function createView(canvas, opts = {}) {
   }
 
   let raf = null;
+  let lastTs = 0;
+  let frozen = false;
+
+  // The flip advances by accumulating each frame's delta instead of reading the wall clock: a paused
+  // animation then simply stops accumulating, and resume() re-bases `lastTs` so the seconds the
+  // player spent paused are never billed to the animation. Summing deltas also means 30 Hz and 144 Hz
+  // traverse the same `span` of milliseconds.
   function tick(ts) {
     raf = null;
-    if (anim) {
-      const span = reduce ? 1 : Number(cssColor('--dur-flip').replace('ms', '')) || 340;
-      anim.t = Math.min(1, (ts - anim.start) / span);
-      if (anim.t >= 1) {
-        const done = anim.done;
-        anim = null;
-        if (done) done();
-      }
+    if (!anim || frozen) return;
+    const span = reduce ? 1 : Number(cssColor('--dur-flip').replace('ms', '')) || 340;
+    const dt = Math.max(0, ts - lastTs);
+    lastTs = ts;
+    anim.elapsed = Math.min(span, anim.elapsed + dt);
+    anim.t = anim.elapsed / span;
+    if (anim.t >= 1) {
+      const done = anim.done;
+      anim = null;
+      if (done) done();
+      want();
+      return;
     }
     want();
-    if (anim) raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick);
   }
 
   function want() {
@@ -238,6 +257,32 @@ export function createView(canvas, opts = {}) {
     },
     setMotion(off) {
       reduce = !!off;
+    },
+    // How far the flip in the air has got, 0..1, or 0 when the stack is at rest. The frame harness
+    // samples this instead of sleeping and hoping the animation is over.
+    animProgress() {
+      return anim ? anim.t : 0;
+    },
+    get paused() {
+      return frozen;
+    },
+    // Stop mid-flip with the elapsed time kept: the model already flipped, so resuming has to finish
+    // *that* flip. Restarting it from 0 would replay a catch-up toward a stack the game left behind.
+    freeze() {
+      frozen = true;
+      if (raf !== null) {
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+      want();
+    },
+    resume() {
+      if (!frozen) return false;
+      frozen = false;
+      // Re-based, not carried: the wall-clock time spent paused must not count as animation time.
+      lastTs = performance.now();
+      if (anim && raf === null) raf = requestAnimationFrame(tick);
+      return true;
     },
     // A theme switch changes what the tokens *say*, and this cache is keyed by property name, not
     // by value — so dropping it is the difference between a palette that repaints and one that
@@ -264,6 +309,7 @@ export function createView(canvas, opts = {}) {
       measure();
       layout(pos.n);
       anim = null;
+      frozen = false;
       want();
     },
     // The model has already flipped, so `pos` is the *new* stack. Take it and draw it arriving from
@@ -284,7 +330,9 @@ export function createView(canvas, opts = {}) {
         if (done) done();
         return;
       }
-      anim = { k, t: 0, start: performance.now(), done };
+      anim = { k, t: 0, elapsed: 0, done };
+      lastTs = performance.now();
+      if (raf !== null) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(tick);
     },
     reject(depth) {
@@ -296,15 +344,21 @@ export function createView(canvas, opts = {}) {
       }, 260);
     },
     // Depth under a client coordinate, or -1 when the tap missed the stack.
+    // Each band is the row centred on its pancake and extended to the full pitch: no gap that would
+    // read as a miss, and no overlap that lets the row above steal a tap aimed at the one below.
+    // `measure()` is what keeps that pitch at or above MIN_HIT.
     depthAt(clientX, clientY) {
       const box = canvas.getBoundingClientRect();
       const y = clientY - box.top;
       const n = shown.sizes.length;
       if (!n) return -1;
       const scale = box.width / geom.w || 1;
+      const v = y * scale;
       for (let d = 0; d < n; d++) {
         const r = rectFor(d, n, shown.sizes);
-        if (y * scale >= r.y - geom.rowH * 0.28 && y * scale <= r.y + r.h + 2) return d;
+        const half = Math.max(r.h / 2, geom.rowH / 2);
+        const c = r.y + r.h / 2;
+        if (v >= c - half && v <= c + half) return d;
       }
       return -1;
     },

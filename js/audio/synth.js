@@ -107,6 +107,27 @@ export function createAudio(storage, opts = {}) {
       }
       history.length = 0;
     },
+    // A pause silences the machine but keeps the score: `history` is what the gate reads to check
+    // that a rejected tap sounded different from a flip, and clearing it here would make a pause
+    // look like it had never happened.
+    suspendForPause() {
+      if (!ctx || ctx.state !== 'running') return false;
+      try {
+        ctx.suspend();
+      } catch {
+        return false;
+      }
+      return true;
+    },
+    unpause() {
+      if (!ctx || !on || ctx.state !== 'suspended') return false;
+      try {
+        ctx.resume();
+      } catch {
+        return false;
+      }
+      return true;
+    },
     // Flipping the whole stack sounds heavier than flipping two: the base falls as `k` grows.
     flip(k, n) {
       const base = 220 - 12 * k;

@@ -14,6 +14,7 @@ import { field } from './engine/graph.js';
 import { grade } from './engine/rules.js';
 import { createGame } from './game.js';
 import { createView } from './view.js';
+import { createMotion } from './motion.js';
 import { createStore } from './store.js';
 import { createTheme } from './theme.js';
 import { createAudio } from './audio/synth.js';
@@ -51,6 +52,7 @@ const REASONS = {
   'too-shallow': '太浅了，这一铲翻不动',
   illegal: '这一铲不合法',
   'already-solved': '这一摞已经叠好了',
+  paused: '已暂停：按 P 或点“继续”先解开，铲子才会动',
 };
 
 const theme = createTheme(storage);
@@ -64,11 +66,15 @@ let row = null;
 let screen = 'menu';
 let focusDepth = 0;
 let toastTimer = null;
+let paused = false;
 
 const view = createView($('#board'), { onFlip: (k) => onFlip(k) });
-// ?motion=off is the only way to reach the reduced-motion path from a headless browser that cannot
-// be told to prefer it: Emulation.setEmulatedMedia is a second driver, and this repo's gate is one.
-if (q.get('motion') === 'off') view.setMotion(true);
+// Motion is a preference the player can change while the tab is open, so it is subscribed rather
+// than sampled: js/motion.js mirrors the media query (and the ?motion=off|on override a headless
+// gate needs) onto <html data-motion>, and this is where that reaches the canvas.
+const motion = createMotion();
+view.setMotion(motion.reducedMotion);
+motion.onChange((reduced) => view.setMotion(reduced));
 theme.onChange(() => view.retoken());
 
 // ---------- routes ----------
@@ -142,6 +148,9 @@ function startLevel(next) {
   // The screen has to be visible before the canvas is measured: a display:none box reports width 0,
   // and the view would then lay the stack out against its 240 px floor.
   showScreen('board');
+  // A level change is not "resume": the pause belonged to the run it was pressed in. The new stack
+  // starts unpaused, and view.show() below drops any flip left mid-air.
+  setPaused(false, true);
   view.show(game.position);
   view.preview(focusDepth);
   updateHud();
@@ -216,6 +225,12 @@ function fmt(n) {
 
 function onFlip(k) {
   if (!game) return;
+  // Before audio.unlock(): that call resumes the context the pause suspended, so a paused board that
+  // is tapped would both stay frozen and start making noise again.
+  if (paused) {
+    reject('paused');
+    return;
+  }
   audio.unlock();
   if (k < 0) {
     reject('not-a-number');
@@ -236,7 +251,10 @@ function onFlip(k) {
 }
 
 function reject(reason, k) {
-  audio.reject();
+  // Not while paused: playing a note runs through ensure(), which resumes the AudioContext the pause
+  // suspended, and a paused game would quietly start making noise again. The toast and the shake are
+  // the explanation either way.
+  if (!paused) audio.reject();
   const msg = REASONS[reason] || '这一铲不行';
   toast(msg);
   const board = $('#board');
@@ -404,21 +422,98 @@ function maxPlainN() {
   return Math.max(...LOTS.filter((r) => r.mode === 'plain').map((r) => r.n));
 }
 
+// ---------- pause / fullscreen ----------
+
+// Pause is a real stop, not a dim overlay: the flip in the air keeps its elapsed time and stops
+// advancing (view.freeze), the AudioContext is suspended so nothing new is scheduled, and every way
+// of moving the stack is refused with a reason. The animation's `done` callback therefore only fires
+// after resume, which is also why the win screen cannot appear from behind the cover.
+function setPaused(on, silent) {
+  if (screen !== 'board' || !game) return paused;
+  const next = !!on;
+  if (next === paused) return paused;
+  paused = next;
+  if (paused) {
+    view.freeze();
+    audio.suspendForPause();
+  } else {
+    view.resume();
+    audio.unpause();
+  }
+  const btn = $('#btn-pause');
+  btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
+  btn.childNodes[0].textContent = paused ? '继续' : '暂停';
+  $('#pause-cover').classList.toggle('on', paused);
+  if (!silent) toast(paused ? '已暂停：翻到一半的那一铲停在原地，继续时接着翻完。' : '继续。');
+  return paused;
+}
+
+// The label reports what the document is doing, not what was asked for: entering fullscreen needs a
+// gesture, can be refused, and can be left with the browser's own chrome — a button that only tracked
+// its own clicks would end up saying the wrong thing.
+function syncFull() {
+  const fs = !!document.fullscreenElement;
+  const btn = $('#btn-full');
+  btn.setAttribute('aria-pressed', fs ? 'true' : 'false');
+  btn.childNodes[0].textContent = fs ? '退出全屏' : '全屏';
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    const p = document.exitFullscreen();
+    if (p && p.catch) p.catch(() => {});
+    return false;
+  }
+  const node = $('#app');
+  const req = node.requestFullscreen || node.webkitRequestFullscreen;
+  if (!req) {
+    toast('这个浏览器不提供全屏');
+    return false;
+  }
+  const r = req.call(node);
+  if (r && r.catch) r.catch(() => toast('全屏被拒绝了：浏览器要求一次真实的点击或按键'));
+  return true;
+}
+
+function toggleSound() {
+  const on = audio.setEnabled(!audio.enabled);
+  $('#btn-sound').setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) audio.unlock();
+  return on;
+}
+
+function toggleExplain() {
+  const d = $('#how');
+  d.open = !d.open;
+  if (d.open) d.scrollIntoView({ block: 'nearest' });
+  return d.open;
+}
+
 // ---------- controls ----------
 
 $('#btn-menu').addEventListener('click', () => navigate('menu'));
 $('#btn-menu-2').addEventListener('click', () => navigate('menu'));
-$('#btn-undo').addEventListener('click', () => game && game.undo());
-$('#btn-restart').addEventListener('click', () => {
+// Every mutating control refuses the same way a tap does, so a click behind the pause cover is
+// explained rather than silently dropped.
+function guard(fn) {
+  return () => {
+    if (paused) {
+      reject('paused');
+      return;
+    }
+    fn();
+  };
+}
+$('#btn-undo').addEventListener('click', guard(() => game && game.undo()));
+$('#btn-restart').addEventListener('click', guard(() => {
   if (!game) return;
   game.restart();
   $('#hint-line').textContent = '';
-});
-$('#btn-hint').addEventListener('click', () => {
+}));
+$('#btn-hint').addEventListener('click', guard(() => {
   if (!game) return;
   if (game.hint() === null) toast('这一摞已经是最优了');
-});
-$('#btn-replay').addEventListener('click', () => startLevel(row));
+}));
 const onNext = () => {
   const i = LOTS.findIndex((r) => row && r.id === row.id);
   if (i < 0 || i + 1 >= LOTS.length) {
@@ -428,12 +523,14 @@ const onNext = () => {
   navigate(LOTS[i + 1].id);
 };
 $('#btn-next').addEventListener('click', onNext);
+$('#btn-replay').addEventListener('click', () => startLevel(row));
 $('#btn-after-win').addEventListener('click', onNext);
-$('#btn-sound').addEventListener('click', (ev) => {
-  const on = audio.setEnabled(!audio.enabled);
-  ev.currentTarget.setAttribute('aria-pressed', on ? 'true' : 'false');
-  if (on) audio.unlock();
-});
+$('#btn-pause').addEventListener('click', () => setPaused(!paused));
+$('#btn-resume').addEventListener('click', () => setPaused(false));
+$('#btn-full').addEventListener('click', () => toggleFullscreen());
+document.addEventListener('fullscreenchange', syncFull);
+document.addEventListener('webkitfullscreenchange', syncFull);
+$('#btn-sound').addEventListener('click', () => toggleSound());
 $('#btn-theme').addEventListener('click', () => {
   theme.cycle();
   $('#btn-theme').dataset.scheme = theme.scheme;
@@ -446,16 +543,63 @@ window.addEventListener('resize', () => {
   view.preview(focusDepth);
 });
 
+function focusMove(step) {
+  const lo = game.burnt ? 0 : 1;
+  focusDepth = Math.max(lo, Math.min(game.n - 1, focusDepth + step));
+  view.preview(focusDepth);
+}
+
 document.addEventListener('keydown', (ev) => {
   if (screen !== 'board' || !game) return;
   const tag = (ev.target && ev.target.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
   const k = ev.key;
+  const low = k.toLowerCase();
+  // These stay live behind the pause cover: a pause that cannot be lifted from the keyboard is a
+  // trap. Escape leaves fullscreen first, and only then the pause.
+  if (k === 'p' || k === 'P') {
+    ev.preventDefault();
+    setPaused(!paused);
+    return;
+  }
+  if (k === 'f' || k === 'F') {
+    ev.preventDefault();
+    toggleFullscreen();
+    return;
+  }
+  if (k === 'm' || k === 'M') {
+    ev.preventDefault();
+    toggleSound();
+    return;
+  }
+  if (k === '?') {
+    ev.preventDefault();
+    toggleExplain();
+    return;
+  }
+  if (k === 'Escape') {
+    if (document.fullscreenElement) toggleFullscreen();
+    else setPaused(false);
+    return;
+  }
+  if (paused) {
+    // The cursor may still move — it changes nothing in the model — but no key advances the stack.
+    if (k === 'ArrowUp' || k === 'ArrowDown') {
+      ev.preventDefault();
+      focusMove(k === 'ArrowUp' ? -1 : 1);
+      return;
+    }
+    if (k === 'Enter' || k === ' ' || low === 'u' || low === 'r' || low === 'h' || /^[1-9]$/.test(k)) {
+      ev.preventDefault();
+      reject('paused');
+    }
+    return;
+  }
+  // Space means "flip", not "pause": an automated harness injects Space to start a run, and a Space
+  // that paused instead would leave it sampling a frozen board and reporting a game in progress.
   if (k === 'ArrowUp' || k === 'ArrowDown') {
     ev.preventDefault();
-    const lo = game.burnt ? 0 : 1;
-    focusDepth = Math.max(lo, Math.min(game.n - 1, focusDepth + (k === 'ArrowUp' ? -1 : 1)));
-    view.preview(focusDepth);
+    focusMove(k === 'ArrowUp' ? -1 : 1);
     return;
   }
   if (k === 'Enter' || k === ' ') {
@@ -467,7 +611,6 @@ document.addEventListener('keydown', (ev) => {
     }
     return;
   }
-  const low = k.toLowerCase();
   if (low === 'u') game.undo();
   else if (low === 'r') game.restart();
   else if (low === 'h') {
@@ -522,7 +665,11 @@ const api = {
       focusDepth,
       theme: theme.scheme,
       effectiveTheme: theme.effective,
-      motion: view.reduced,
+      motion: motion.reducedMotion,
+      motionSource: motion.source,
+      paused,
+      animT: view.animProgress(),
+      fullscreen: !!document.fullscreenElement,
       sound: audio.enabled,
       records: Object.keys(progress.levels).length,
       salvaged: progress.salvaged || 0,
@@ -552,6 +699,9 @@ const api = {
   progress: () => JSON.parse(JSON.stringify(progress.levels)),
   setTheme: (s) => theme.set(s),
   setSound: (v) => audio.setEnabled(v),
+  setMotion: (v) => motion.set(v),
+  pause: (v) => setPaused(v === undefined ? !paused : v),
+  fullscreen: () => toggleFullscreen(),
   begin: (id) => navigate(id),
 };
 
