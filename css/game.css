@@ -58,6 +58,15 @@
   --bad: #b8402c;
 }
 
+/* safe-area：刘海与home条占的那一圈。index.html 的 viewport 已经写了 viewport-fit=cover，
+   没有它这些 env() 在 iOS 上恒为 0 —— 适配就成了注释。0px 兜底是给桌面与 file:// 的。 */
+:root {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+}
+
 /* The one rule that makes `hidden` mean hidden: any section below sets its own display, and a
    `display:grid` on a [hidden] element wins over the UA sheet and shows it anyway. */
 [hidden] {
@@ -88,7 +97,7 @@ body {
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 0 var(--pad) 28px;
+  padding: 0 calc(var(--pad) + var(--safe-r)) calc(28px + var(--safe-b)) calc(var(--pad) + var(--safe-l));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -99,7 +108,7 @@ body {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 14px 0 6px;
+  padding: calc(14px + var(--safe-t)) 0 6px;
 }
 
 #title-block h1 {
@@ -138,8 +147,10 @@ button {
 }
 
 .icon {
-  width: 38px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 0;
 }
 
@@ -249,6 +260,7 @@ code {
 .card {
   text-align: left;
   padding: 8px 9px;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -289,6 +301,11 @@ code {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+#random-buttons button {
+  min-height: 44px;
+  min-width: 44px;
 }
 
 #seed-line {
@@ -423,6 +440,73 @@ code {
   opacity: 1;
 }
 
+/* The pause cover eats the pointer, so "paused" is true of the input path and not only of what the
+   canvas stopped drawing. It paints with --bg at partial element opacity rather than a second
+   hard-coded rgba: a scrim literal per palette is exactly the drift js/theme.js exists to avoid, and
+   the frozen stack stays legible behind it. */
+#pause-cover {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  border-radius: var(--radius-s);
+  background: var(--bg);
+  opacity: 0.9;
+  z-index: 2;
+}
+
+#pause-cover.on {
+  display: flex;
+}
+
+#pause-cover .pause-t {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+#pause-cover .pause-s {
+  margin: 0;
+  max-width: 40ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+#pause-cover button {
+  margin-top: 6px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-s);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#pause-cover .sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}
+
+/* Two utility buttons would leave two empty cells in a four-column grid; spanning keeps the row flush
+   at every width, and at two columns each one takes its own row. */
+#btn-pause,
+#btn-full {
+  grid-column: span 2;
+}
+
 #controls,
 .controls {
   display: grid;
@@ -435,6 +519,7 @@ code {
 .controls button {
   position: relative;
   padding: 10px 6px;
+  min-height: 44px;
 }
 
 #controls .sub {
@@ -458,6 +543,9 @@ details {
 summary {
   cursor: pointer;
   padding: 8px 11px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   font-size: 13px;
   color: var(--ink-dim);
 }
@@ -553,9 +641,12 @@ summary {
   }
 }
 
-/* The flip animation is drawn on canvas; this only governs whether the DOM transitions run. */
+/* Stillness has two independent ways in, and only the second one is reachable from a scripted tab:
+   the OS switch through the media query, and <html data-motion>, which js/motion.js writes from the
+   live query *and* the ?motion=off|on override. Both set the same tokens, so the DOM transitions and
+   the canvas flip duration cannot disagree about what "reduced" means. */
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  html {
     --dur: 1ms;
     --dur-flip: 1ms;
   }
@@ -563,6 +654,20 @@ summary {
   *::before,
   *::after {
     animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+html[data-motion='reduce'] {
+  --dur: 1ms;
+  --dur-flip: 1ms;
+}
+
+html[data-motion='reduce'] *,
+html[data-motion='reduce'] *::before,
+html[data-motion='reduce'] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
 }

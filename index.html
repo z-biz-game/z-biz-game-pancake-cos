@@ -77,9 +77,14 @@
     <div id="board-wrap">
       <canvas id="board" width="620" height="460" role="img" tabindex="0"
               aria-label="一摞烙饼。点某张饼下方把铲子插进去，翻起它和它上面的所有饼。键盘用上下键选深度、回车翻。"></canvas>
-      <p id="kbd-hint" class="note">↑ 选深度 · Enter / 空格 翻 · U 撤销 · R 重来 · H 提示</p>
+      <p id="kbd-hint" class="note">↑ 选深度 · Enter / 空格 翻 · U 撤销 · R 重来 · H 提示 · P 暂停 · F 全屏 · M 静音 · ? 说明</p>
       <p id="hint-line" aria-live="polite"></p>
       <p id="toast" role="status" aria-live="assertive"></p>
+      <div id="pause-cover" class="pause">
+        <p class="pause-t">已暂停</p>
+        <p class="pause-s">饼停在原地，翻到一半的那一铲也停在原地 —— 继续时接着翻完，不重来。</p>
+        <button id="btn-resume" type="button">继续<span class="sub">P</span></button>
+      </div>
     </div>
 
     <div id="controls">
@@ -87,6 +92,8 @@
       <button id="btn-restart" type="button">重来</button>
       <button id="btn-hint" type="button">提示<span class="sub">交出最优首步</span></button>
       <button id="btn-next" type="button">下一关</button>
+      <button id="btn-pause" type="button" aria-pressed="false">暂停<span class="sub">P</span></button>
+      <button id="btn-full" type="button" aria-pressed="false">全屏<span class="sub">F</span></button>
     </div>
 
     <details id="how">
