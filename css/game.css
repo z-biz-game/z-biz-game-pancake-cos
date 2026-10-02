@@ -340,7 +340,14 @@ code {
 
 #board-wrap {
   position: relative;
-  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  /* 灶台：art/grain-256.png 是一张只有明度的中性颗粒（均值 128，实测 min 54 / max 228），
+     以 overlay 叠在面板渐变上 —— 同一张图在亮暗两套配色下都只改明度、不改色相，
+     不必为第二套配色再存一张。画布只在饼摞处有像素，所以颗粒就是从摞周围透出来的台面。
+     url 相对本样式表解析，Pages 的 /z-biz-game-pancake-cos/ 前缀形态下才不会 404。 */
+  background-image: url('../art/grain-256.png'), linear-gradient(180deg, var(--panel), var(--panel-2));
+  background-repeat: repeat, no-repeat;
+  background-size: 256px 256px, cover;
+  background-blend-mode: overlay, normal;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -476,6 +483,15 @@ summary {
 
 #move-log li.good {
   color: var(--good);
+}
+
+/* 收局页的盘饰就是仓里那张 sprite（assets/gen/make_art.py 的 render_sprite）。饼身颜色不随灯换，
+   所以亮暗两套共用一张，不必出第二个文件。 */
+#win-plate {
+  width: 108px;
+  height: 108px;
+  margin: 8px auto 0;
+  background: url('../art/win-plate-240.png') center / contain no-repeat;
 }
 
 #win-stats {

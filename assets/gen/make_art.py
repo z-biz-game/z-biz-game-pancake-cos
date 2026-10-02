@@ -218,17 +218,17 @@ def render_app(size, P, maskable=False, opaque=False):
     return Image.alpha_composite(img, rim).resize((size, size), Image.LANCZOS)
 
 
-def render_tile(size, P):
-    """Tileable cast-iron texture for #board-wrap: the pits wrap across all four edges."""
+def render_tile(size):
+    """Tileable grain for #board-wrap: neutral luminance only, so `overlay` works on both palettes."""
     S = size * 4
-    img = Image.new('RGBA', (S, S), mix(P['panel'], (0, 0, 0), 0.12) + (255,))
+    img = Image.new('RGBA', (S, S), (128, 128, 128, 255))
     dr = ImageDraw.Draw(img, 'RGBA')
-    speckle(dr, S / 2, S / 2, S * 0.75, S * 0.75, mix(P['panel'], (0, 0, 0), 0.55) + (90,), 420, wrap=S)
-    speckle(dr, S / 2, S / 2, S * 0.75, S * 0.75, mix(P['press-light'], P['panel'], 0.5) + (34,), 150, seed=11, wrap=S)
+    speckle(dr, S / 2, S / 2, S * 0.75, S * 0.75, (58, 58, 58, 90), 420, wrap=S)
+    speckle(dr, S / 2, S / 2, S * 0.75, S * 0.75, (206, 206, 206, 60), 150, seed=11, wrap=S)
     # A faint brushed arc so the tile is not pure noise; drawn through the centre twice for the wrap.
     for cx in (0, S):
         dr.arc([cx - S * 0.9, -S * 0.4, cx + S * 0.9, S * 1.4], 20, 160,
-               fill=mix(P['plate'], P['panel'], 0.55) + (40,), width=int(S * 0.004))
+               fill=(168, 168, 168, 46), width=int(S * 0.004))
     return img.resize((size, size), Image.LANCZOS)
 
 
@@ -304,7 +304,7 @@ def main():
         out.append(write('icons/icon-1024.png', render_app(1024, P)))
 
     if a.only in (None, 'art'):
-        out.append(write('art/griddle-256.png', render_tile(256, P)))
+        out.append(write('art/grain-256.png', render_tile(256)))
         out.append(write('art/win-plate-240.png', render_sprite(240, P)))
         out.append(write('art/og-1200x630.png', render_og(1200, 630, P, {
             'title': '烙饼 PANCAKE',
