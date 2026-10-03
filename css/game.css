@@ -601,3 +601,17 @@ a[href],
   min-height: 44px !important;
   min-width: 44px !important;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   线上实测（https://z-biz-game.github.io/z-biz-game-pancake-cos/，CDP setDeviceMetricsOverride
+   dpr=3，读数在 _tmp-live-sweep-r19.log）：320×640 报 vw=356≠320——布局视口被页面自己撑宽。
+   #topbar 是 auto 1fr auto 三列网格，中间那格的副标题「前缀翻转排序 · 每关 par 都是量出来的」
+   在 12px + 0.22em 字距下要点 260px 才排得下，加上左右两栏的 44px 图标按钮（#topbar-actions
+   一行 200px），320 装不下 → #topbar-actions 落在 x=156..356、#btn-fullscreen 整枚在屏幕外。
+   44px 的下限不动，把动作条挪到自成一行：标题那一行还留 1fr，副标题本来就按 <p> 折行。
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 420px) {
+  #topbar { grid-template-columns: auto 1fr; row-gap: 8px; }
+  #title-block { min-width: 0; }
+  #topbar-actions { grid-column: 1 / -1; flex-wrap: wrap; row-gap: 6px; }
+}
