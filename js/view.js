@@ -204,8 +204,15 @@ export function createView(canvas, opts = {}) {
   }
 
   let raf = null;
+  // 暂停闸门。anim.start 是 performance.now() 的时间戳，anim.t = (ts - anim.start) / span
+  // 直接拿墙钟差做缓动 ⇒ 暂停期间憋下的时间会在恢复那一帧一次性灌进来，翻牌直接"啪"地跳到终点。
+  // 所以：暂停时不再排 rAF（anim.t 不再推进），恢复时把 anim.start 整体后移暂停时长，
+  // 剩余时长原样接着走 —— 既不丢进度，也不会有恢复尖峰。
+  let paused = false;
+  let pausedAt = 0;
   function tick(ts) {
     raf = null;
+    if (paused) return;                       // 暂停中：一步都不许推进
     if (anim) {
       const span = reduce ? 1 : Number(cssColor('--dur-flip').replace('ms', '')) || 340;
       anim.t = Math.min(1, (ts - anim.start) / span);
@@ -231,6 +238,23 @@ export function createView(canvas, opts = {}) {
     get reduced() {
       return reduce;
     },
+    setPaused(v) {
+      v = !!v;
+      if (v === paused) return paused;
+      paused = v;
+      if (v) {
+        pausedAt = performance.now();
+        if (raf) cancelAnimationFrame(raf);
+        raf = null;                            // 心跳停掉，anim.t 冻结在暂停那一刻
+      } else if (anim) {
+        // 关键：把起算点后移暂停时长，恢复后的 (ts - anim.start) 与暂停前连续 ⇒ 无跳变
+        anim.start += performance.now() - pausedAt;
+        raf = requestAnimationFrame(tick);
+      }
+      return paused;
+    },
+    isPaused: () => paused,
+    animProgress: () => (anim ? anim.t : null),
     // True while a flip is mid-air. The gate waits on this instead of on a sleep, so "the animation
     // finished" is an observation and not an assumption about how long rAF takes in headless Chrome.
     get busy() {
@@ -279,6 +303,7 @@ export function createView(canvas, opts = {}) {
     },
     // After the model has flipped: run the visual catch-up, then hand control back.
     animateFlip(k, done) {
+      if (paused) { if (done) done(); return; }   // 暂停中直接落定，不排动画
       if (reduce || !k) {
         want();
         if (done) done();

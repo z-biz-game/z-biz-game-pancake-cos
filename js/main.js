@@ -625,3 +625,44 @@ window.pancake = api;
   window.addEventListener('MSFullscreenChange', sync);
   sync();
 })();
+
+// ---- 暂停：真的把仿真冻住 ----
+//
+// 本仓没有计时器，唯一持续推进的仿真是 view.js 里那次翻牌缓动（anim.t 靠 performance.now()
+// 的时间戳差推进）。所以暂停直接交给 view.setPaused()：它停掉 rAF 心跳把 anim.t 冻在暂停那一刻，
+// 恢复时把 anim.start 后移暂停时长，剩余时长原样接着走 —— 既不丢进度，也没有恢复尖峰。
+// 用 var 不用 let：本段在文件末尾，view 早已建好，但 let 的 TDZ 在被别处提前调用时会直接抛。
+var paused = false;
+function setPaused(v) {
+  v = !!v;
+  if (v === paused) return paused;
+  paused = view.setPaused(v);
+  // topbar-actions 一排都是 38×34 的 .icon 按钮，所以这里也用图标约定：
+  // 字形 ⏸/▶ 切换，aria-label 与 title 始终写明"按下去会发生什么"，aria-pressed 给出当前开关态。
+  var b = document.getElementById('btn-pause');
+  if (b) {
+    b.setAttribute('aria-pressed', String(paused));
+    b.textContent = paused ? '▶' : '⏸';
+    b.setAttribute('aria-label', paused ? '继续' : '暂停');
+    b.title = paused ? '继续 (P)' : '暂停 (P)';
+  }
+  return paused;
+}
+function togglePause() { return setPaused(!paused); }
+function isPaused() { return paused; }
+
+document.getElementById('btn-pause').addEventListener('click', togglePause);
+window.addEventListener('keydown', function (ev) {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.target && /input|textarea|select/i.test(ev.target.tagName)) return;
+  if (ev.key === 'p' || ev.key === 'P') { ev.preventDefault(); togglePause(); }
+});
+
+// 给真浏览器闸 / 量尺读的台面（简报 §3 要求把窗口状态挂出来，否则判据无法复验）。
+window.pancake = {
+  view,
+  setPaused, togglePause, isPaused,
+  animProgress: () => view.animProgress(),
+  state: () => ({ screen, paused, hasGame: !!game, n: game && game.n, moves: game && game.moves }),
+  startLevel: (i) => startLevel(i),
+};
