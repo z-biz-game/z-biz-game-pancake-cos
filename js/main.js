@@ -524,6 +524,8 @@ const api = {
       effectiveTheme: theme.effective,
       motion: view.reduced,
       sound: audio.enabled,
+      // 暂停态挂在同一个 state 上：[pause] 腿既读按钮的 aria-pressed，也读这里，两边必须一致。
+      paused,
       records: Object.keys(progress.levels).length,
       salvaged: progress.salvaged || 0,
       problems: store.problems,
@@ -553,6 +555,11 @@ const api = {
   setTheme: (s) => theme.set(s),
   setSound: (v) => audio.setEnabled(v),
   begin: (id) => navigate(id),
+  // 暂停的三个动词挂在这**同一个**台面上：见文件末尾那段——第二次 `window.pancake = {...}`
+  // 会把这个对象整个换掉，而闸读的 engine / go / hint / solveAll 全在换掉的那一半里。
+  setPaused,
+  togglePause,
+  isPaused,
 };
 
 window.pancake = api;
@@ -662,11 +669,7 @@ window.addEventListener('keydown', function (ev) {
   if (ev.key === 'p' || ev.key === 'P') { ev.preventDefault(); togglePause(); }
 });
 
-// 给真浏览器闸 / 量尺读的台面（简报 §3 要求把窗口状态挂出来，否则判据无法复验）。
-window.pancake = {
-  view,
-  setPaused, togglePause, isPaused,
-  animProgress: () => view.animProgress(),
-  state: () => ({ screen, paused, hasGame: !!game, n: game && game.n, moves: game && game.moves }),
-  startLevel: (i) => startLevel(i),
-};
+// 台面只有一个：上面那个 `window.pancake = api`。这里再赋一次会把整个对象换掉，
+// 于是 api 里的 engine / go / hint / solveAll / bootAt / version 全部消失，
+// 而浏览器闸的每条腿都从那些字段起步（136893d 就这么把 13 条腿打成 0 条断言，CI 连红三次）。
+// 暂停的动词已经挂在 api 上，缓动进度在 state 里，量尺读数走 A().view（pixels/geom/busy/animProgress）。

@@ -45,7 +45,7 @@ fi
 [ -x "$CHROME" ] || { echo "no Chrome found; set CHROME_BIN" >&2; exit 2; }
 
 FAILED=0
-LEG_NAMES="boot table menu play reject hint hit save reloaded theme win layout"
+LEG_NAMES="boot table menu play pause reject hint hit save reloaded theme win layout"
 # The data gate first: it is 38 ms, and a shipped par that the graph disagrees with should stop the
 # run before a browser is even started.
 echo "=== bake --check ==="
@@ -158,13 +158,21 @@ run_shape() {
   export BASE_URL="$BASE"
   node tools/playtest.cjs open "$BASE" | head -3
 
+  # The witness asks for the fields the legs actually read, and it has to tell "no handle at all"
+  # apart from "handle without the engine". main.js once grew a second `window.pancake = {...}` at its
+  # tail: the object was still there and `version` was still readable, so this loop "passed" and every
+  # leg then died on a TypeError before pushing a row — 13 legs, 0 checks, three red CI runs.
+  SURVEY='(function(){var s=["version","engine","state","go","view","optimal","hint","solveAll"];var p=window.pancake;if(!p)return "nope";var m=s.filter(function(k){return p[k]===undefined||p[k]===null});if(m.length)return "missing:"+m.join(",");return p.version+"/"+p.engine.TIERS.length})()'
   BOOT=""
   for i in $(seq 1 60); do
-    BOOT=$(node tools/playtest.cjs eval "window.pancake?window.pancake.version:'nope'" nonav 2>/dev/null | tr -d '\n" ')
-    case "$BOOT" in *nope*|"") sleep 0.5 ;; *) break ;; esac
+    BOOT=$(node tools/playtest.cjs eval "$SURVEY" nonav 2>/dev/null | tr -d '\n" ')
+    case "$BOOT" in nope|missing:*|"") sleep 0.5 ;; *) break ;; esac
   done
   echo "boot: pancake $BOOT at $BASE"
-  [ "$BOOT" = "nope" ] && { echo "window.pancake never appeared at $BASE" >&2; return 4; }
+  case "$BOOT" in
+    nope) echo "window.pancake never appeared at $BASE" >&2; return 4 ;;
+    missing:*) echo "window.pancake at $BASE is missing the fields the legs read ($BOOT) — the handle was replaced by a smaller one; fix js/main.js before anything else" >&2; return 4 ;;
+  esac
 
   local bad=0 N=0
   for s in ${SCENARIOS:-$LEG_NAMES}; do

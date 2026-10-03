@@ -171,9 +171,11 @@ node 里量出来的表要能在 Chrome 里逐字节复现，否则 `[table]` �
 | --- | --- |
 | `node tools/bake.mjs --check` | 23 行重算 61 ms（复跑过 45–61 ms，只当量级看）；`n=8 plain` 40 320/40 320 直径 9；`n=6 burnt` 46 080/46 080 直径 12 |
 | `npm test`（六套） | 431 条断言，1.6 s，0 失败 |
-| `bash tools/verify.sh`（双形态） | 每形态 13 腿 / 388 条，0 失败；整跑 41 s |
-| 稳定性 | 同一命令连跑两遍，逐腿条数完全一致（15/22/28/44/32/45/49/18/16/22/45/25/27） |
+| `bash tools/verify.sh`（双形态） | 每形态 14 腿 / 412 条，0 失败；整跑 42 s（`_tmp-pancake-verify-r1.log` … `r5.log`，2026-10-04，本机；r3/r4/r5 跑在定稿树上，r5 是时间判据改成跟着实测 `gap` 之后的那一跑） |
+| 稳定性 | 同一命令连跑三遍 × 两形态，逐腿条数完全一致（15/22/28/44/**24**/32/45/49/18/16/22/45/25/27；24 是新增的 `[pause]` 腿，它带时间判据，所以这三遍就是它的 flake 检查，逐腿对账在 `_tmp-pancake-rerun-compare-r2.log`）。判据本身另测：`SHAPES=root SCENARIOS=pause` 连跑三遍（`_tmp-pancake-pause-r3.log`，`PAUSE_R3_1/2/3_RC=0`），`tPause` 0.131/0.153/0.168、`gapMs` 42/42/43、`jumpedMs` 52/53/35——上限是 `gap + 60`，读数没有贴着边 |
+| 台面被换掉过一次 | `136893d` 在 main.js 末尾第二次 `window.pancake = {…}`，旧 preflight 只读 `version`（那一半里恰好没有）⇒ 放行后 13 条腿全在第一条断言前抛 TypeError：`0/13 legs reported · 0 checks`，CI run#4/#5/#6 连红而 Pages 照旧 success。改成一个台面 + 八字段证人；K3 刀（把台面换成半个）现在在 boot 那行就点名 `missing:version,engine,…` 并停跑 |
+| `[pause]` 腿的三把阳性对照 | K1（恢复不后移 `anim.start`）红"恢复那一帧…"，读数 `视觉上 340ms / 恢复后又过了 42ms`；K2（`view.setPaused` 标志位不落地）红 7 行含按钮字形与 `aria-pressed`；K3（台面换成半个）在 boot 点名。三把刀在 `_tmp-pancake-knife-r3.log`：`K1 GATE_RC=1 · FAIL 行 1`／`K2 GATE_RC=1 · 7`／`K3 GATE_RC=1 · FAIL 行 0 但点名行 1`（K3 按设计死在腿开始之前，`_tmp-pancake-knife-r2.log` 曾把它误记成"没点名"，那段 更正 在它自己的日志末尾） |
 | 远端 `cf1597a` | Actions：CI 与 Deploy to GitHub Pages 两个 workflow 均 `completed / success`；CI 的 11 + 7 个 step 全 success |
-| 已部署站点 | `BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh` → `shape=custom: 13/13 legs · 388 checks · 0 failed` |
+| 已部署站点 | 同上命令 → `shape=custom: 13/13 legs · 388 checks · 0 failed`，那是 `cf1597a` 那一轮的读数；14 腿 / 412 条之后这一跑要重做，部署件的数记在它自己的日志里 |
 | runner 自己的条数 | **没取到**：jobs raw log 这一轮先是 TLS 抖、换签名 URL 又 403，所以只引上面的 step 状态，不代 runner 报条数 |
 | 出货规模 | 6 档 23 关；普通最重八层，焦边最重六层 |

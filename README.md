@@ -7,14 +7,29 @@
 真下界**，不是"某个解法用了几步"，也不是启发式估计。三层普通 6 个局面、八层普通 40 320 个、六层
 焦边 46 080 个——每一个都访问过，出货表里的每个数字都是这张距离场的读数。
 
-本文里的数字只有两类来源：仓里读得到的代码，和 2026-09-28 那一轮全绿跑出来的读数（node v26.8.1 /
-macOS 26.6.2 / Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs --check`、
-`npm test`（六套 61 / 148 / 92 / 49 / 33 / 48 条）、`bash tools/verify.sh`（双 URL 形态各 13 腿
-388 条）。同一份闸连跑两遍，逐腿条数一致，两次都 `=== ALL GREEN ===`。出货那一次（commit `cf1597a`）
-远端两层也各自绿过：Actions 上 CI 与 Pages 两个 workflow 均 `completed / success`，把同一个闸指向
-已部署站点（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/`）跑出
-`shape=custom: 13/13 legs · 388 checks · 0 failed`。CI 的 unit job 跑在 Node 20、
+本文里的数字只有两类来源：仓里读得到的代码，和闸跑出来的读数（本机 node v26.8.1 / macOS 26.6.2 /
+Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs --check`、
+`npm test`（六套 61 / 148 / 92 / 49 / 33 / 48 条，2026-10-04 复跑 `_tmp-pancake-node-r1.log` 六个 rc 全 0）、
+`bash tools/verify.sh`（**双 URL 形态各 14 腿 · 412 条 · 0 failed**，`_tmp-pancake-verify-r1.log`
+… `r5.log`；同一份闸连跑五遍逐腿条数逐位一致 `15,22,28,44,24,32,45,49,18,16,22,45,25,27`，
+五遍都 `=== ALL GREEN ===`，r5 跑在提交前的定稿树上；逐腿对账 `_tmp-pancake-rerun-compare-r3.log`，
+`IDENTICAL_PER_LEG(5 passes x 2 shapes)= yes`，10 个形态-跑次全部对齐）。
+
+这条闸曾经**瞎过一阵**，形状值得写下来：`136893d`（暂停真冻结）在 `js/main.js` 末尾又赋了一次
+`window.pancake = {…}`，把整个台面换成一个只有四个键的对象。旧 preflight 只读 `version`，而换掉的
+那一半里恰恰没有 `version` ⇒ 它打印出 `boot: pancake undefined` 却照样放行，13 条腿全在第一条
+断言之前抛 TypeError ⇒ `shape=root: 0/13 legs reported · 0 checks · 0 failed`，CI run#4/#5/#6 三连红，
+而 Pages 每轮照旧 `success`。**游戏本身没坏**：同一时段打线上站点的那把量尺里，pancake 在 390×844
+档 `no-x`、35 枚控件 0 枚低于 44px 指尖下限（`_tmp-live-sweep-r19.log`；那一跑的 320 档确实横向
+出屏，那是 `1497286` 修掉的动作条，与这条瞎掉的闸无关），坏的是量具。
+现在台面只有一个赋值，preflight 与 `ready()` 审的是腿真正要读的那八个字段，缺谁就点名谁。
+
+出货那一次（commit `cf1597a`）远端两层都绿过：Actions 上 CI 与 Pages 均 `completed / success`，
+把同一个闸指向已部署站点跑出 `13/13 legs · 388 checks · 0 failed`。CI 的 unit job 跑在 Node 20、
 browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑，本机没有装 20 或 22。
+上面那句 14 腿 / 412 条是**本机两形态**的读数；部署件那一跑
+（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh`）在台面修复
+部署之后要重做，它的条数记在它自己的日志里，不拿本机的数顶。
 
 **代码 > 本文档**：本文与 `js/`、`tools/` 冲突时，以代码和它跑出来的输出为准。
 
@@ -81,6 +96,8 @@ browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑
 | 命中几何只在真浏览器里可证 | `[hit]` 腿：每个 `pointFor(k)` 的客户端坐标必须 `elementFromPoint` 命中画布本身，且 `depthAt` 只认高度不认横坐标 |
 | 换皮真的换了像素 | `[theme]` 腿：读 `--plate` 的 computed 值，再读画布上盘子位置的像素，两者对齐；切亮色时盘子像素必须移动而焦边像素不动 |
 | 窄屏不是把桌面压扁 | 同一条 `layout` 腿在 `Emulation` 的 380×780@2 视口里再跑一遍，并且先断言覆写真的生效（视口 ≤ 520 且 dpr ≥ 2） |
+| 暂停真的把仿真冻住 | `[pause]` 腿按玩家那枚 `#btn-pause`：`view.animProgress()` 必须**逐位停在按下那一刻**、画布上那张饼的像素不变；恢复走键盘 `p`，判据是"恢复后视觉上多走的 ≤ 恢复之后**实测**过去的那段时间 + 一帧余量"——式子挂在 CSS 的 `--dur-flip` 与两个 `performance.now()` 实测值上，不挂 340 / 40 这种抄来的数（共享 runner 上 `setTimeout` 会漂，写死的带会把一台慢机器判成缺陷）。K1 刀（不后移 `anim.start`）红这一条，读数 `视觉上 340ms / 恢复后又过了 42ms`；K2 刀（标志位不落地）红 7 行，含按钮字形与 `aria-pressed` |
+| 量具真的对着本仓发力 | preflight 读的不是"`window.pancake` 在不在"，而是腿真正要读的八个字段（`version/engine/state/go/view/optimal/hint/solveAll`）。K3 刀把台面换成半个对象 ⇒ boot 那一行就点名 `missing:version,engine,…` 并停止开腿，不再放行到 13 条腿里各自抛 TypeError 交回 0 条断言。三把刀在 `_tmp-pancake-knife-r3.log`，`K1 GATE_RC=1 · 点名行=1`／`K2 GATE_RC=1 · 点名行=7`／`K3 GATE_RC=1 · 点名行=1` |
 
 浏览器闸跑**两种 URL 形态**：`server.cjs` 把仓库当文档根（`http://127.0.0.1:5266/`），以及
 Pages 的形状（一个只含符号链接的目录做根，仓库在路径的一段下面）。只有第二种能看见"绝对
@@ -114,3 +131,7 @@ SHOTS=v1 ./tools/verify.sh          # 顺手写 tools/shots/*.png
 - 六层焦边是出货的最重焦边阵（46 080）；七层焦边 645 120 个局面没进表，也没进 CI 的墙钟。
 - 浏览器闸需要本机有 Chrome（或设 `CHROME_BIN`）。它读画布像素、发真指针事件，所以没有 jsdom 替代。
 - 提示给的是答案不是方向：一旦用过，这一关在这一台机器上就永久带标记。这是设计，不是 bug。
+- **暂停冻的是仿真，不是模型**。本仓没有计时器，唯一持续推进的仿真就是翻牌那一段缓动（`anim.t` 靠
+  `performance.now()` 的差推进），所以暂停 = 停掉 rAF 心跳、恢复时把 `anim.start` 后移暂停时长。
+  按下暂停后**仍然下得去手**：那一铲走 `view.animateFlip` 的暂停分支直接落定、不排缓动（`[pause]` 腿
+  把这两条都写成断言，改天想挡输入得先改这条边界）。
