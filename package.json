@@ -10,7 +10,9 @@
     "check:data": "node tools/bake.mjs --check",
     "test": "for f in test/*.test.mjs; do node \"$f\" || exit 1; done",
     "verify": "bash tools/verify.sh",
-    "check": "for f in js/*.js js/*/*.js; do node --check \"$f\" || exit 1; done && node --check server.cjs && for f in tools/*.mjs tools/*.cjs test/*.mjs; do node --check \"$f\" || exit 1; done && echo OK"
+    "check": "for f in js/*.js js/*/*.js; do node --check \"$f\" || exit 1; done && node --check server.cjs && for f in tools/*.mjs tools/*.cjs test/*.mjs; do node --check \"$f\" || exit 1; done && echo OK",
+    "deploy-set": "node tools/deploy-set.mjs",
+    "deploy-set:selftest": "node tools/deploy-set-selftest.mjs"
   },
   "keywords": [
     "game",
