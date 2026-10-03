@@ -7,6 +7,11 @@
 <meta name="description" content="把一摞烙饼按大小叠整齐：一次只能从底下铲起最上面若干张、整段翻面。每一关的 par 是把整个状态图做完一次广度优先后量出来的，不是估计。">
 <link rel="stylesheet" href="css/game.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='20' width='26' height='6' rx='3' fill='%23e0a458'/%3E%3Crect x='6' y='13' width='20' height='6' rx='3' fill='%23c9863c'/%3E%3Crect x='9' y='6' width='14' height='6' rx='3' fill='%23a86a28'/%3E%3C/svg%3E">
+
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
 <div id="app">
@@ -100,5 +105,6 @@
 </div>
 <!-- one boot script; the whole module graph is static so a Pages prefix cannot break it -->
 <script type="module" src="js/main.js"></script>
+  <script src="js/sw-register.js"></script>
 </body>
 </html>
