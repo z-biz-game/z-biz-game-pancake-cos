@@ -24,12 +24,20 @@ Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs -
 出屏，那是 `1497286` 修掉的动作条，与这条瞎掉的闸无关），坏的是量具。
 现在台面只有一个赋值，preflight 与 `ready()` 审的是腿真正要读的那八个字段，缺谁就点名谁。
 
-出货那一次（commit `cf1597a`）远端两层都绿过：Actions 上 CI 与 Pages 均 `completed / success`，
-把同一个闸指向已部署站点跑出 `13/13 legs · 388 checks · 0 failed`。CI 的 unit job 跑在 Node 20、
-browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑，本机没有装 20 或 22。
-上面那句 14 腿 / 412 条是**本机两形态**的读数；部署件那一跑
-（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh`）在台面修复
-部署之后要重做，它的条数记在它自己的日志里，不拿本机的数顶。
+台面修复这一笔（commit `7086ee6`，2026-10-03 20:21Z 推送）远端两层都绿过，而且是这条闸活着的时候
+第一次绿：Actions 上 CI run#7 与 Deploy to GitHub Pages run#7 均 `completed / success`，CI 的两个
+job 里 `syntax + engine guarantees` 8 个 step、`real browser gate (both URL shapes)` 的
+`Browser gate (root + prefix)` step 全 success，那一步在 runner 上走了 54 s（20:21:25 → 20:22:19，
+本机整跑 42 s，量级一致）。CI 的 unit job 跑在 Node 20、browser job 跑在 Node 22，那两个版本上的
+第一手证据就是那一跑，本机没有装 20 或 22。
+**部署件那一跑也重做了**（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh`
+→ `_tmp-pancake-deployed-r1.log`）：`shape=custom: 14/14 legs reported · 412 checks · 0 failed`、
+`=== ALL GREEN ===`、`PAN_DEPLOYED_RC=0`，逐腿条数与本机两形态的五遍逐位一致
+（`15,22,28,44,24,32,45,49,18,16,22,45,25,27`），`[pause]` 腿在线上读到的也是同一套时间量
+（`tPause=0.166 / gapMs=42 / jumpedMs=40`，上限 `gap+60`）。此前 `cf1597a` 那一跑的
+`13/13 legs · 388 checks` 是加腿之前的读数，留着不改。runner 自己打印的条数**仍然没取到**：
+`/actions/jobs/<id>/logs` 的签名 URL 这一轮回 401（上一轮是 TLS 抖与 403），所以上面只引 step 状态
+与耗时，不代 runner 报条数。
 
 **代码 > 本文档**：本文与 `js/`、`tools/` 冲突时，以代码和它跑出来的输出为准。
 
