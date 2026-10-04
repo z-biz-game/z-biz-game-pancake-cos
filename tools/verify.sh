@@ -50,6 +50,11 @@ LEG_NAMES="boot table menu play pause reject hint hit save reloaded theme win la
 # run before a browser is even started.
 echo "=== bake --check ==="
 if node "$HERE/tools/bake.mjs" --check 2>&1 | tail -6 | sed 's/^/  /'; then :; else FAILED=1; fi
+# 部署集闸：ci.yml 跑这两步、本地整闸以前一次都不跑（59 仓同形）。「本地全绿、线上 404 自己的
+# manifest / sw.js / 图标」这一类坏法缺的就是这一步。和 bake 一样，它不碰 Chrome，红在起浏览器之前。
+echo "=== deploy-set ==="
+node "$HERE/tools/deploy-set.mjs" || FAILED=1
+node "$HERE/tools/deploy-set-selftest.mjs" || FAILED=1
 
 SPID=0
 PROOT=""
