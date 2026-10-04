@@ -234,7 +234,7 @@ run_shape() {
 
 if [ -n "${BASE_URL:-}" ]; then
   SHAPES_TO_RUN="custom"
-  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP :$PORT）"
+  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP :${PORT}）"
 else
   SHAPES_TO_RUN=${SHAPES:-root prefix}
 fi
