@@ -28,7 +28,7 @@ REPO=$(basename "$HERE")
 # failing leg into "see the log that no longer exists". .gate/ is gitignored.
 LOGD=${LOG_DIR:-$HERE/.gate}
 mkdir -p "$LOGD"
-PORT=${CDP_PORT:-9386}
+PORT=${CDP_PORT:-9386}; if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo ":$PORT is already LISTENING — a sibling gate or an orphan Chrome holds it; attaching there reads someone else's browser. Wait for it to finish, or rerun with CDP_PORT=<a free port>." >&2; lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true; exit 6; fi  # 一机一台：撞在同一个默认口上时不报错的是 Chrome，报错的是绿——先让路再开闸
 # 5173 is Xcode/ashen-ring's default and a long-lived server there will happily serve a *different*
 # app, so this harness runs on its own ports. Other agents in the farm run their own verify.sh at
 # the same time; 5266 (root), 5267 (prefix) and 9386 (CDP) are pancake's and nothing else's.
