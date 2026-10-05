@@ -328,34 +328,44 @@ def write(rel, img):
     return path, img.size, os.path.getsize(path)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--only', choices=['icons', 'art'], help='只重生成一组')
-    a = ap.parse_args()
-    P = palette()
-    out = []
+def jobs(P):
+    """出货的位图清单：一行一条字面量路径。
 
-    if a.only in (None, 'icons'):
-        for size in (16, 32, 48, 96):
-            out.append(write(f'icons/favicon-{size}.png', render_app(size, P)))
+    路径写成字面量是有原因的：test/assets.test.mjs 会拿磁盘上的 art/ 与 icons/ 和这张表对账，
+    而 f-string 里的 `icons/favicon-{size}.png` 在这种对账下等于没写。新增一张图必须同时在这里
+    登记和进 sw.js 的 SHELL，否则台账会红 —— 而不是等到离线首启才发现少了哪张。
+    """
+    return [
+        ('icons', 'icons/favicon-16.png', lambda: render_app(16, P)),
+        ('icons', 'icons/favicon-32.png', lambda: render_app(32, P)),
+        ('icons', 'icons/favicon-48.png', lambda: render_app(48, P)),
+        ('icons', 'icons/favicon-96.png', lambda: render_app(96, P)),
         # apple-touch-icon: iOS refuses alpha, so it gets the same mark on a solid griddle.
-        out.append(write('icons/apple-touch-icon.png', render_app(180, P, opaque=True).convert('RGB')))
-        out.append(write('icons/icon-192.png', render_app(192, P)))
-        out.append(write('icons/icon-512.png', render_app(512, P)))
-        out.append(write('icons/icon-maskable-512.png', render_app(512, P, maskable=True).convert('RGB')))
-        out.append(write('icons/icon-1024.png', render_app(1024, P)))
-
-    if a.only in (None, 'art'):
-        out.append(write('art/grain-256.png', render_tile(256)))
-        out.append(write('art/spatula-720x96.png', render_spatula(720, 96, P)))
-        out.append(write('art/win-plate-240.png', render_sprite(240, P)))
-        out.append(write('art/og-1200x630.png', render_og(1200, 630, P, {
+        ('icons', 'icons/apple-touch-icon.png', lambda: render_app(180, P, opaque=True).convert('RGB')),
+        ('icons', 'icons/icon-192.png', lambda: render_app(192, P)),
+        ('icons', 'icons/icon-512.png', lambda: render_app(512, P)),
+        ('icons', 'icons/icon-maskable-512.png', lambda: render_app(512, P, maskable=True).convert('RGB')),
+        ('icons', 'icons/icon-1024.png', lambda: render_app(1024, P)),
+        ('art', 'art/grain-256.png', lambda: render_tile(256)),
+        ('art', 'art/spatula-720x96.png', lambda: render_spatula(720, 96, P)),
+        ('art', 'art/win-plate-240.png', lambda: render_sprite(240, P)),
+        ('art', 'art/og-1200x630.png', lambda: render_og(1200, 630, P, {
             'title': '烙饼 PANCAKE',
             'sub': ['前缀翻转排序：一铲翻起最上面若干张',
                     '每关的 par 都是全图广度优先量出的下界'],
             'foot': ['零依赖 · 纯 ES module · 可离线安装',
                      'github.com/z-biz-game/z-biz-game-pancake-cos'],
-        })))
+        })),
+    ]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--only', choices=['icons', 'art'], help='只重生成一组')
+    a = ap.parse_args()
+    P = palette()
+    out = [write(rel, render()) for group, rel, render in jobs(P)
+           if not a.only or group == a.only]
 
     for path, size, n in out:
         print('%-34s %4dx%-4d %7d B' % (os.path.relpath(path, ROOT), size[0], size[1], n))
