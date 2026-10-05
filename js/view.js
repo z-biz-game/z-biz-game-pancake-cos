@@ -352,8 +352,13 @@ export function createView(canvas, opts = {}) {
       const y = clientY - box.top;
       const n = shown.sizes.length;
       if (!n) return -1;
-      const scale = box.width / geom.w || 1;
-      const v = y * scale;
+      // `geom.w` is the CSS width the stack was laid out against; the box may since have changed
+      // (rotation, a layout shift before the resize handler runs). The forward map is
+      // screen = drawing * scale, so the inverse is a division — multiplying lands the tap on the
+      // wrong row, which is exactly "点 A 打 B".
+      const scale = box.width / geom.w;
+      if (!(scale > 0)) return -1;
+      const v = y / scale;
       for (let d = 0; d < n; d++) {
         const r = rectFor(d, n, shown.sizes);
         const half = Math.max(r.h / 2, geom.rowH / 2);
