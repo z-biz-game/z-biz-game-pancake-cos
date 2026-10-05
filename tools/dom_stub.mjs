@@ -323,6 +323,18 @@ export function installDom(opts = {}) {
   win.window = win;
   win.self = win;
   win.globalThis = win;
+  // A real window carries these handler slots only when the platform supports that input model, and
+  // view.js feature-detects with `'onpointerdown' in window`.
+  const POINTER_SLOTS = ['onpointerdown', 'onpointerup', 'onpointercancel', 'onpointermove'];
+  const MOUSE_SLOTS = ['onmousedown', 'onmouseup', 'onmousemove'];
+  const TOUCH_SLOTS = ['ontouchstart', 'ontouchend', 'ontouchcancel'];
+  for (const k of [...POINTER_SLOTS, ...MOUSE_SLOTS, ...TOUCH_SLOTS]) win[k] = null;
+  function setPointerSupport(on) {
+    for (const k of POINTER_SLOTS) {
+      if (on) win[k] = null;
+      else delete win[k];
+    }
+  }
 
   const g = {
     window: win, document: doc, location, history, performance: perf, localStorage: localStorageStub,
@@ -364,7 +376,7 @@ export function installDom(opts = {}) {
   doc.querySelector = ((real) => (sel) => (sel === '#board' ? board : real(sel)))(doc.querySelector);
 
   return {
-    win, doc, board, screens, tokens, stats, audioContexts,
+    win, doc, board, screens, tokens, stats, audioContexts, setPointerSupport,
     el: (sel) => doc.querySelector(sel),
     setFps(f) { fps = f; },
     get fps() { return fps; },

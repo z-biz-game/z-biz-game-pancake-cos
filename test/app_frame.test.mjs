@@ -26,6 +26,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { suite } from '../tools/harness.mjs';
 import { installDom } from '../tools/dom_stub.mjs';
+import { createView } from '../js/view.js';
 
 const t = suite('app-frame');
 const env = installDom();
@@ -253,6 +254,42 @@ t.where('坐标按 CSS 缩放换算：画布被缩放后点第 3 张仍然翻第
   };
   scaledTap(0.5);
   scaledTap(1.5);
+}
+
+t.where('输入回落：没有 Pointer Events 的浏览器（老 iOS Safari）靠 touch/mouse 一样能翻');
+{
+  const canvas2 = env.doc.createElement('canvas');
+  canvas2._rect = { left: 0, top: 0, width: 800, height: 576 };
+  const taps = [];
+  env.setPointerSupport(false);
+  const v2 = createView(canvas2, { onFlip: (k) => taps.push(k) });
+  env.setPointerSupport(true);
+  v2.show({ n: 5, burnt: false, sizes: [4, 1, 3, 5, 2], sides: [] });
+  const p = v2.pointFor(4);
+  let prevented = 0;
+  const touch = (type, at) => {
+    const q = at || p;
+    return canvas2.dispatch(type, {
+      touches: type === 'touchstart' ? [{ clientX: q.x, clientY: q.y }] : [],
+      changedTouches: [{ clientX: q.x, clientY: q.y }],
+      preventDefault() { prevented++; },
+    });
+  };
+  touch('touchstart');
+  t.eq('touchstart 把铲线停在第 4 张下面', v2.geom().press, 3);
+  touch('touchend');
+  t.eq('touchend 交出第 4 张', taps.join(','), '4');
+  t.eq('两端各 preventDefault 一次（挡住页面滚动与兼容 click）', prevented, 2);
+  canvas2.dispatch('mousedown', { clientX: p.x, clientY: p.y });
+  canvas2.dispatch('mouseup', { clientX: p.x, clientY: p.y });
+  t.eq('纯鼠标机器上 mousedown/up 也能翻', taps.join(','), '4,4');
+  canvas2.dispatch('pointerdown', { clientX: p.x, clientY: p.y });
+  canvas2.dispatch('pointerup', { clientX: p.x, clientY: p.y });
+  t.eq('回落分支不再同时听 pointer 事件，不会双触发', taps.join(','), '4,4');
+  const miss = { x: p.x, y: canvas2._rect.top + 5 };
+  touch('touchstart', miss);
+  touch('touchend', miss);
+  t.eq('落在摞外的触摸报 -1，让页面去解释而不是静默吞掉', taps.join(','), '4,4,-1');
 }
 
 t.done();

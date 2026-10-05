@@ -402,32 +402,58 @@ export function createView(canvas, opts = {}) {
     },
   };
 
-  canvas.addEventListener('pointerdown', (ev) => {
-    const d = view.depthAt(ev.clientX, ev.clientY);
-    press = d;
+  // Where a press began, in drawing space, and what a release at the same place means.
+  const pressDown = (clientX, clientY) => {
+    press = view.depthAt(clientX, clientY);
     want();
-    if (typeof canvas.setPointerCapture === 'function' && ev.pointerId !== undefined) {
-      try {
-        canvas.setPointerCapture(ev.pointerId);
-      } catch {
-        /* a synthetic event has no pointer to capture */
+  };
+  const pressUp = (clientX, clientY) => {
+    const d = view.depthAt(clientX, clientY);
+    press = null;
+    want();
+    listener(d < 0 ? -1 : d + 1);
+  };
+
+  // Read at construction, not at module load, so the fallback branch is reachable in a harness.
+  const supportsPointer = typeof window !== 'undefined' && 'onpointerdown' in window;
+  if (supportsPointer) {
+    canvas.addEventListener('pointerdown', (ev) => {
+      pressDown(ev.clientX, ev.clientY);
+      if (typeof canvas.setPointerCapture === 'function' && ev.pointerId !== undefined) {
+        try {
+          canvas.setPointerCapture(ev.pointerId);
+        } catch {
+          /* a synthetic event has no pointer to capture */
+        }
       }
-    }
-  });
-  canvas.addEventListener('pointerup', (ev) => {
-    const d = view.depthAt(ev.clientX, ev.clientY);
-    press = null;
-    want();
-    if (d < 0) {
-      listener(-1);
-      return;
-    }
-    listener(d + 1);
-  });
-  canvas.addEventListener('pointercancel', () => {
-    press = null;
-    want();
-  });
+    });
+    canvas.addEventListener('pointerup', (ev) => pressUp(ev.clientX, ev.clientY));
+    canvas.addEventListener('pointercancel', () => {
+      press = null;
+      want();
+    });
+  } else {
+    const first = (ev) => (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || null;
+    // passive:false because a touch that starts on the stack must not scroll the page underneath it,
+    // and preventDefault on touchend is what stops the browser firing a *second* flip as a
+    // compatibility mousedown/mouseup pair.
+    canvas.addEventListener('touchstart', (ev) => {
+      const p = first(ev);
+      if (p) pressDown(p.clientX, p.clientY);
+      if (ev.preventDefault) ev.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchend', (ev) => {
+      const p = (ev.changedTouches && ev.changedTouches[0]) || first(ev);
+      if (p) pressUp(p.clientX, p.clientY);
+      if (ev.preventDefault) ev.preventDefault();
+    }, { passive: false });
+    canvas.addEventListener('touchcancel', () => {
+      press = null;
+      want();
+    });
+    canvas.addEventListener('mousedown', (ev) => pressDown(ev.clientX, ev.clientY));
+    canvas.addEventListener('mouseup', (ev) => pressUp(ev.clientX, ev.clientY));
+  }
 
   measure();
   return view;
