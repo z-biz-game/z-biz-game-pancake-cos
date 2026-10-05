@@ -292,4 +292,57 @@ t.where('输入回落：没有 Pointer Events 的浏览器（老 iOS Safari）�
   t.eq('落在摞外的触摸报 -1，让页面去解释而不是静默吞掉', taps.join(','), '4,4,-1');
 }
 
+t.where('美术进画布：铲刃 sprite 与台面颗粒是 canvas 调用，不只是 CSS 背景');
+{
+  const pump = (n) => env.advanceTo(env.clock + n * (1000 / env.fps));
+  const before = env.stats.images.length;
+  const c4 = env.doc.createElement('canvas');
+  c4._rect = { left: 0, top: 0, width: 800, height: 576 };
+  const v4 = createView(c4, {});
+  const requested = env.stats.images.slice(before);
+  t.ok('两张母题位图按仓内路径被请求',
+    requested.includes('art/spatula-720x96.png') && requested.includes('art/grain-256.png'));
+  pump(1); // 桩里的 Image 与真浏览器一样异步：解码回调落在下一帧
+  const art = v4.artState();
+  t.eq('铲刃图解码到位', art.spatula, true);
+  t.eq('颗粒图做成 pattern', art.grain, true);
+  const calls = c4._ctx._calls;
+  t.ok('createPattern 真的被调用（不是只 new 了 Image）', (calls.get('createPattern') || 0) >= 1);
+  const boot = app.view.artState();
+  t.eq('页面 boot 的 view 也拿到了两张图', boot.spatula && boot.grain, true);
+  const boardCalls = env.board._ctx._calls;
+  t.ok('#board 画布自己建过 grain pattern', (boardCalls.get('createPattern') || 0) >= 1);
+  t.ok('#board 画布真的 blit 过铲刃', (boardCalls.get('drawImage') || 0) >= 1);
+
+  const sizes = [4, 1, 3, 5, 2];
+  v4.show({ n: 5, burnt: false, sizes, sides: [] });
+  const g = v4.geom();
+  const drawnBefore = calls.get('drawImage') || 0;
+  v4.preview(2);
+  pump(1);
+  const args = (c4._ctx._args.drawImage || []).slice(-1)[0];
+  t.eq('armed 切线多出一次 drawImage', (calls.get('drawImage') || 0) - drawnBefore, 1);
+  t.ok('参数形状是 (img, dx, dy, dw, dh)', Array.isArray(args) && args.length === 5);
+  const [, dx, dy, dw, dh] = args;
+  // rectFor 的独立复算：sprite 中线必须等于命中带那条 y，否则"看到的线"和"点下去的行"会分家。
+  const cutY = g.y0 + 2 * g.rowH + Math.max(10, g.rowH - 5) + 2.5;
+  t.near('sprite 中线正好落在切线上', dy + dh / 2, cutY, 1e-6);
+  t.eq('铲刃从饼摞左侧起画', dx, g.x0 - 14);
+  t.near('保持 720x96 原生比例，不拉伸', dw / dh, 720 / 96, 1e-9);
+  t.ok('整把铲子落在画布内', dx >= 0 && dx + dw <= g.w + 1);
+
+  env.setLoadImages(false);
+  const c5 = env.doc.createElement('canvas');
+  c5._rect = { left: 0, top: 0, width: 800, height: 576 };
+  const v5 = createView(c5, {});
+  env.setLoadImages(true);
+  v5.show({ n: 5, burnt: false, sizes, sides: [] });
+  v5.preview(2);
+  pump(2);
+  const c5calls = c5._ctx._calls;
+  t.eq('图没解码时不假装画了铲子', v5.artState().spatula, false);
+  t.eq('未解码分支一次 drawImage 也没有', c5calls.get('drawImage') || 0, 0);
+  t.ok('退化成矢量虚线（setLineDash 被调用）', (c5calls.get('setLineDash') || 0) >= 1);
+}
+
 t.done();

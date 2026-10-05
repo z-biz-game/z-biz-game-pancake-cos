@@ -128,6 +128,16 @@ def stack(P, n=4, cut=1, burnt=True):
     return out
 
 
+def tones(P):
+    """The spatula's three colours: steel blade, shaded underside, wood handle. Shared by the
+    motif (icons, og card, win sprite) and the in-canvas sprite sheet so they cannot drift."""
+    return (
+        mix(P['plate'], P['press-light'], 0.82),
+        mix(P['plate'], P['press-light'], 0.45),
+        mix(P['pancake-edge'], (0, 0, 0), 0.3),
+    )
+
+
 def draw_motif(img, P, *, griddle=True, spatula=True, scale=1.0, ox=0.0, oy=0.0):
     """Paint the stack into `img`. All coordinates are unit fractions of the image height."""
     S = img.height
@@ -170,14 +180,13 @@ def draw_motif(img, P, *, griddle=True, spatula=True, scale=1.0, ox=0.0, oy=0.0)
     if spatula:
         under = stack(P)[-2]  # the cut one pancake below the top: the move this mark is about
         blade_y = under['top'] + under['h'] * 0.5
-        metal = mix(P['plate'], P['press-light'], 0.82)
-        dark = mix(P['plate'], P['press-light'], 0.45)
+        metal, dark, wood = tones(P)
         dr.rounded_rectangle(box(0.02, blade_y - 0.014, 0.44, blade_y + 0.014),
                              radius=0.014 * S * scale, fill=metal + (255,))
         dr.line(box(0.02, blade_y + 0.014, 0.44, blade_y + 0.014), fill=dark + (255,),
                 width=max(1, int(0.006 * S * scale)))
         dr.rounded_rectangle(box(0.005, blade_y - 0.022, 0.10, blade_y + 0.022),
-                             radius=0.02 * S * scale, fill=mix(P['pancake-edge'], (0, 0, 0), 0.3) + (255,))
+                             radius=0.02 * S * scale, fill=wood + (255,))
 
 
 def fit_motif(img, P, **kw):
@@ -239,6 +248,39 @@ def render_sprite(size, P):
     img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
     fit_motif(img, P)
     return img.resize((size, size), Image.LANCZOS)
+
+
+def render_spatula(w, h, P):
+    """The motif's spatula on its own transparent sheet — this is what the canvas draws across the
+    cut line, so the in-game gesture and the app icon are literally the same object. Sheet shape is
+    15:2: the blade has to read as a thin bar spanning a whole row, with the icon's stubby knob at
+    its left. The slots are cut out of the alpha channel rather than painted dark: through them the
+    player should see the pancake underneath, exactly as on a real turner."""
+    ss = 3
+    W, H = w * ss, h * ss
+    img = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img, 'RGBA')
+    metal, dark, wood = tones(P)
+
+    def R(x0, y0, x1, y1):
+        return (x0 * W, y0 * H, x1 * W, y1 * H)
+
+    def L(x0, y0, x1, y1):
+        return [(x0 * W, y0 * H), (x1 * W, y1 * H)]
+
+    dr.rounded_rectangle(R(0.075, 0.42, 0.995, 0.58), radius=0.07 * H, fill=metal + (255,))
+    dr.rounded_rectangle(R(0.005, 0.10, 0.085, 0.90), radius=0.03 * W, fill=wood + (255,))
+    dr.ellipse(R(0.025, 0.40, 0.065, 0.60), fill=dark + (255,))  # rivet
+    dr.line(L(0.09, 0.58, 0.99, 0.58), fill=dark + (255,), width=max(1, int(0.025 * H)))
+    dr.line(L(0.10, 0.44, 0.975, 0.44), fill=mix(metal, (255, 255, 255), 0.55) + (140,),
+            width=max(1, int(0.012 * H)))
+
+    alpha = img.getchannel('A')
+    ad = ImageDraw.Draw(alpha)
+    for x0, x1 in ((0.28, 0.44), (0.50, 0.66), (0.72, 0.88)):
+        ad.rounded_rectangle(R(x0, 0.455, x1, 0.545), radius=0.008 * W, fill=0)
+    img.putalpha(alpha)
+    return img.resize((w, h), Image.LANCZOS)
 
 
 def render_og(w, h, P, rows):
@@ -305,6 +347,7 @@ def main():
 
     if a.only in (None, 'art'):
         out.append(write('art/grain-256.png', render_tile(256)))
+        out.append(write('art/spatula-720x96.png', render_spatula(720, 96, P)))
         out.append(write('art/win-plate-240.png', render_sprite(240, P)))
         out.append(write('art/og-1200x630.png', render_og(1200, 630, P, {
             'title': '烙饼 PANCAKE',

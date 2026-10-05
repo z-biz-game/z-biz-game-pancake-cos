@@ -16,6 +16,13 @@ const BOT_PAD = 26;
 // 所以 measure() 只在"排不下"时长高画布，本来就够的关卡（n=3 手机上行距 46）比例不动。
 const MIN_HIT = 44;
 
+// 母题的两张位图，由 assets/gen/make_art.py 现产（颜色抽自 css/game.css 的 token）。
+// 铲刃就是图标上那一铲，画在切线上；颗粒是中性明度的铁板麻点，以 overlay 压在盘面上。
+const SPATULA_SRC = 'art/spatula-720x96.png';
+const GRAIN_SRC = 'art/grain-256.png';
+const SPATULA_W = 720;
+const SPATULA_H = 96;
+
 export function createView(canvas, opts = {}) {
   const ctx = canvas.getContext('2d');
   const listener = opts.onFlip || (() => {});
@@ -27,6 +34,34 @@ export function createView(canvas, opts = {}) {
   let press = null;
   let shown = { sizes: [], sides: [] };
   let frameWanted = false;
+  // Null until (and unless) the sheet decodes: file://, an offline first paint and this repo's node
+  // harness all leave these empty, and the vector fallbacks below are what those cases draw.
+  let spatula = null;
+  let grain = null;
+
+  function loadArt() {
+    if (typeof Image !== 'function') return;
+    const blade = new Image();
+    blade.onload = () => {
+      if (!blade.naturalWidth && !blade.width) return;
+      spatula = blade;
+      want();
+    };
+    blade.src = SPATULA_SRC;
+    const tile = new Image();
+    tile.onload = () => {
+      // A 0x0 source throws in some engines, and a throw here would take the whole board down.
+      if (!(tile.naturalWidth || tile.width)) return;
+      try {
+        grain = ctx.createPattern(tile, 'repeat');
+      } catch {
+        grain = null;
+      }
+      want();
+    };
+    tile.src = GRAIN_SRC;
+  }
+  loadArt();
 
   function measure() {
     const box = canvas.getBoundingClientRect();
@@ -73,10 +108,22 @@ export function createView(canvas, opts = {}) {
     // plate — a token colour, because "the theme changed" has to be visible on the canvas too, not
     // only in the DOM. platePoint() hands the gate the exact pixel to read.
     const plateY = geom.y0 + n * geom.rowH + 6;
-    ctx.fillStyle = withAlpha(cssColor('--plate'), 0.42);
     ctx.beginPath();
     ctx.ellipse(geom.w / 2, plateY, geom.maxW * 0.62, 11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = withAlpha(cssColor('--plate'), 0.42);
     ctx.fill();
+    if (grain) {
+      // The ellipse path is still current, so clip() + fill() puts the pitting on the plate and
+      // nowhere else. 'overlay' on a neutral-luminance tile: darks deepen, lights lift, neither
+      // palette tints.
+      ctx.save();
+      ctx.clip();
+      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = grain;
+      ctx.fill();
+      ctx.restore();
+    }
 
     const slots = positions(n);
     for (let d = 0; d < n; d++) {
@@ -86,14 +133,27 @@ export function createView(canvas, opts = {}) {
     // the spatula line: where a tap would cut
     if (press !== null && press >= 0) {
       const r = rectFor(press, n, shown.sizes);
-      ctx.strokeStyle = withAlpha(cssColor('--warn'), 0.85);
-      ctx.setLineDash([5, 4]);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(geom.x0 - 14, r.y + r.h + 2.5);
-      ctx.lineTo(geom.x0 + geom.maxW + 12, r.y + r.h + 2.5);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      const cutY = r.y + r.h + 2.5;
+      const x0 = geom.x0 - 14;
+      const w = geom.maxW + 26;
+      if (spatula) {
+        // The sheet keeps its own shape; its centre line sits on exactly the y the hit band was
+        // computed from, so what the player sees and what the tap means cannot drift apart.
+        const h = w * (SPATULA_H / SPATULA_W);
+        ctx.save();
+        ctx.globalAlpha = 0.97;
+        ctx.drawImage(spatula, x0, cutY - h / 2, w, h);
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = withAlpha(cssColor('--warn'), 0.85);
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x0, cutY);
+        ctx.lineTo(x0 + w, cutY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     // the count column: how many pancakes a tap here moves
     ctx.font = '600 12px ' + (cssColor('--mono') || 'monospace');
@@ -381,6 +441,11 @@ export function createView(canvas, opts = {}) {
         depth: d,
         k: d + 1,
       };
+    },
+    // Whether each sheet actually reached the canvas, and under which path: a harness asserts on
+    // this plus the recorded draw calls instead of trusting a screenshot.
+    artState() {
+      return { spatula: !!spatula, grain: !!grain, sources: [SPATULA_SRC, GRAIN_SRC] };
     },
     geom() {
       // `press` is the depth the spatula line is currently drawn at, and it has to be readable: a

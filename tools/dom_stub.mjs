@@ -63,15 +63,24 @@ export function installDom(opts = {}) {
   function makeCtx2d(el) {
     const calls = new Map();
     const args = new Map();
+    // Every ctx method has to be countable, including the ones that must return a real value:
+    // a test asserting "the art was drawn through canvas" reads the call log, so a stubbed method
+    // that silently skipped the log would make that claim unfalsifiable.
+    const record = (name, impl) => (...a) => {
+      calls.set(name, (calls.get(name) || 0) + 1);
+      (args[name] = args[name] || []).push(a);
+      stats.drawCalls++;
+      return impl ? impl(...a) : undefined;
+    };
     const base = {
       canvas: el,
       _calls: calls,
       _args: args,
-      getImageData: () => ({ data: el._pixelData || new Uint8ClampedArray([0, 0, 0, 0]) }),
-      measureText: () => ({ width: 10 }),
-      createPattern: () => ({ __pattern: true }),
-      createLinearGradient: () => ({ addColorStop() {} }),
-      createRadialGradient: () => ({ addColorStop() {} }),
+      getImageData: record('getImageData', () => ({ data: el._pixelData || new Uint8ClampedArray([0, 0, 0, 0]) })),
+      measureText: record('measureText', () => ({ width: 10 })),
+      createPattern: record('createPattern', () => ({ __pattern: true })),
+      createLinearGradient: record('createLinearGradient', () => ({ addColorStop() {} })),
+      createRadialGradient: record('createRadialGradient', () => ({ addColorStop() {} })),
     };
     return new Proxy(base, {
       get(o, k) {
@@ -230,15 +239,25 @@ export function installDom(opts = {}) {
     audioContexts.push(self);
   }
 
+  let loadImages = opts.loadImages !== false;
   function FakeImage() {
     const self = this;
     self.width = 0;
     self.height = 0;
+    self.naturalWidth = 0;
+    self.naturalHeight = 0;
     self.complete = false;
     self._h = {};
     self.addEventListener = (t, cb) => { (self._h[t] = self._h[t] || []).push(cb); };
     self.dispatch = (t) => {
       self.complete = t === 'load';
+      if (self.complete) {
+        // A decoded bitmap reports its intrinsic size, and view.js refuses to build a pattern from a
+        // 0x0 source — so the stub has to answer like a real one.
+        const m = /(\d+)x(\d+)/.exec(String(self._src));
+        self.naturalWidth = self.width = m ? Number(m[1]) : 256;
+        self.naturalHeight = self.height = m ? Number(m[2]) : 256;
+      }
       if (typeof self['on' + t] === 'function') self['on' + t]({ type: t });
       for (const cb of (self._h[t] || []).slice()) cb({ type: t });
     };
@@ -247,7 +266,7 @@ export function installDom(opts = {}) {
       set: (v) => {
         self._src = v;
         stats.images.push(v);
-        if (opts.loadImages === false) return;
+        if (!loadImages) return;
         imageQueue.push(self);
       },
     });
@@ -377,6 +396,7 @@ export function installDom(opts = {}) {
 
   return {
     win, doc, board, screens, tokens, stats, audioContexts, setPointerSupport,
+    setLoadImages(on) { loadImages = !!on; },
     el: (sel) => doc.querySelector(sel),
     setFps(f) { fps = f; },
     get fps() { return fps; },
@@ -388,8 +408,10 @@ export function installDom(opts = {}) {
     frameTo,
     advanceTo,
     // Drop everything the previous run left in flight, so ladder 2 does not inherit ladder 1's
-    // pending toast. The clock restarts at the same 1000 ms for every run.
-    reset() { clock = 1000; rafMap.clear(); timers.length = 0; imageQueue.length = 0; },
+    // pending toast. The clock restarts at the same 1000 ms for every run. A pending image decode
+    // is *not* dropped: in a real browser setting `src` has already committed the download, and
+    // cancelling it here would mean the page's own canvas never receives its art.
+    reset() { clock = 1000; rafMap.clear(); timers.length = 0; },
     pixelData: (rgb) => { board._ctx._pixelData = new Uint8ClampedArray([rgb[0], rgb[1], rgb[2], 255]); },
   };
 }
