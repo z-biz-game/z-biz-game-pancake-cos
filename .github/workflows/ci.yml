@@ -44,8 +44,7 @@ jobs:
       # perms 49 · rules 33 · store 48). The graph suite is the expensive one: it walks n=1..9
       # plain (up to 362 880 positions) and n=2..7 burnt against the published diameters.
       - name: Engine and page-model suites
-        run: |
-          for f in $(git ls-files 'test/*.test.mjs'); do node "$f" || exit 1; done
+        run: npm test
 
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html && grep -q 'css/game.css' index.html
