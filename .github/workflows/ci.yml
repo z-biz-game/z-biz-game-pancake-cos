@@ -22,11 +22,7 @@ jobs:
       # No npm install: the game has zero runtime dependencies, and pulling a package manager into
       # CI to prove nothing is how a repo starts failing on a network flake.
       - name: Syntax check every source
-        run: |
-          for f in $(git ls-files 'js/*.js' 'js/*/*.js'); do node --check "$f" || exit 1; done
-          node --check server.cjs
-          for f in $(git ls-files 'tools/*.mjs' 'tools/*.cjs' 'test/*.mjs'); do node --check "$f" || exit 1; done
-
+        run: npm run check
       # The layering invariant: `js/` ships to the browser, `tools/` does not. A runtime module
       # reaching into tools/ is either a 404 in production or bench code served as product code, and
       # then no gate below can be trusted to mean "the shipped bundle is the tested code".
