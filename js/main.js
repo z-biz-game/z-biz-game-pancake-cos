@@ -66,7 +66,6 @@ let row = null;
 let screen = 'menu';
 let focusDepth = 0;
 let toastTimer = null;
-let paused = false;
 
 const view = createView($('#board'), { onFlip: (k) => onFlip(k) });
 // Motion is a preference the player can change while the tab is open, so it is subscribed rather
@@ -428,25 +427,6 @@ function maxPlainN() {
 // advancing (view.freeze), the AudioContext is suspended so nothing new is scheduled, and every way
 // of moving the stack is refused with a reason. The animation's `done` callback therefore only fires
 // after resume, which is also why the win screen cannot appear from behind the cover.
-function setPaused(on, silent) {
-  if (screen !== 'board' || !game) return paused;
-  const next = !!on;
-  if (next === paused) return paused;
-  paused = next;
-  if (paused) {
-    view.freeze();
-    audio.suspendForPause();
-  } else {
-    view.resume();
-    audio.unpause();
-  }
-  const btn = $('#btn-pause');
-  btn.setAttribute('aria-pressed', paused ? 'true' : 'false');
-  btn.childNodes[0].textContent = paused ? '继续' : '暂停';
-  $('#pause-cover').classList.toggle('on', paused);
-  if (!silent) toast(paused ? '已暂停：翻到一半的那一铲停在原地，继续时接着翻完。' : '继续。');
-  return paused;
-}
 
 // The label reports what the document is doing, not what was asked for: entering fullscreen needs a
 // gesture, can be refused, and can be left with the browser's own chrome — a button that only tracked
