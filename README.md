@@ -7,14 +7,37 @@
 真下界**，不是"某个解法用了几步"，也不是启发式估计。三层普通 6 个局面、八层普通 40 320 个、六层
 焦边 46 080 个——每一个都访问过，出货表里的每个数字都是这张距离场的读数。
 
-本文里的数字只有两类来源：仓里读得到的代码，和 2026-09-28 那一轮全绿跑出来的读数（node v26.8.1 /
-macOS 26.6.2 / Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs --check`、
-`npm test`（六套 61 / 148 / 92 / 49 / 33 / 48 条）、`bash tools/verify.sh`（双 URL 形态各 13 腿
-388 条）。同一份闸连跑两遍，逐腿条数一致，两次都 `=== ALL GREEN ===`。出货那一次（commit `cf1597a`）
-远端两层也各自绿过：Actions 上 CI 与 Pages 两个 workflow 均 `completed / success`，把同一个闸指向
-已部署站点（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/`）跑出
-`shape=custom: 13/13 legs · 388 checks · 0 failed`。CI 的 unit job 跑在 Node 20、
-browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑，本机没有装 20 或 22。
+本文里的数字只有两类来源：仓里读得到的代码，和闸跑出来的读数（本机 node v26.8.1 / macOS 26.6.2 /
+Chrome 154.0.8037.57 / Apple M5 Pro 15 核）。命令是 `node tools/bake.mjs --check`、
+`npm test`（六套 61 / 148 / 92 / 49 / 33 / 48 条，2026-10-04 复跑 `_tmp-pancake-node-r1.log` 六个 rc 全 0）、
+`bash tools/verify.sh`（**双 URL 形态各 14 腿 · 412 条 · 0 failed**，`_tmp-pancake-verify-r1.log`
+… `r5.log`；同一份闸连跑五遍逐腿条数逐位一致 `15,22,28,44,24,32,45,49,18,16,22,45,25,27`，
+五遍都 `=== ALL GREEN ===`，r5 跑在提交前的定稿树上；逐腿对账 `_tmp-pancake-rerun-compare-r3.log`，
+`IDENTICAL_PER_LEG(5 passes x 2 shapes)= yes`，10 个形态-跑次全部对齐）。
+
+这条闸曾经**瞎过一阵**，形状值得写下来：`136893d`（暂停真冻结）在 `js/main.js` 末尾又赋了一次
+`window.pancake = {…}`，把整个台面换成一个只有四个键的对象。旧 preflight 只读 `version`，而换掉的
+那一半里恰恰没有 `version` ⇒ 它打印出 `boot: pancake undefined` 却照样放行，13 条腿全在第一条
+断言之前抛 TypeError ⇒ `shape=root: 0/13 legs reported · 0 checks · 0 failed`，CI run#4/#5/#6 三连红，
+而 Pages 每轮照旧 `success`。**游戏本身没坏**：同一时段打线上站点的那把量尺里，pancake 在 390×844
+档 `no-x`、35 枚控件 0 枚低于 44px 指尖下限（`_tmp-live-sweep-r19.log`；那一跑的 320 档确实横向
+出屏，那是 `1497286` 修掉的动作条，与这条瞎掉的闸无关），坏的是量具。
+现在台面只有一个赋值，preflight 与 `ready()` 审的是腿真正要读的那八个字段，缺谁就点名谁。
+
+台面修复这一笔（commit `7086ee6`，2026-10-03 20:21Z 推送）远端两层都绿过，而且是这条闸活着的时候
+第一次绿：Actions 上 CI run#7 与 Deploy to GitHub Pages run#7 均 `completed / success`，CI 的两个
+job 里 `syntax + engine guarantees` 8 个 step、`real browser gate (both URL shapes)` 的
+`Browser gate (root + prefix)` step 全 success，那一步在 runner 上走了 54 s（20:21:25 → 20:22:19，
+本机整跑 42 s，量级一致）。CI 的 unit job 跑在 Node 20、browser job 跑在 Node 22，那两个版本上的
+第一手证据就是那一跑，本机没有装 20 或 22。
+**部署件那一跑也重做了**（`BASE_URL=https://z-biz-game.github.io/z-biz-game-pancake-cos/ bash tools/verify.sh`
+→ `_tmp-pancake-deployed-r1.log`）：`shape=custom: 14/14 legs reported · 412 checks · 0 failed`、
+`=== ALL GREEN ===`、`PAN_DEPLOYED_RC=0`，逐腿条数与本机两形态的五遍逐位一致
+（`15,22,28,44,24,32,45,49,18,16,22,45,25,27`），`[pause]` 腿在线上读到的也是同一套时间量
+（`tPause=0.166 / gapMs=42 / jumpedMs=40`，上限 `gap+60`）。此前 `cf1597a` 那一跑的
+`13/13 legs · 388 checks` 是加腿之前的读数，留着不改。runner 自己打印的条数**仍然没取到**：
+`/actions/jobs/<id>/logs` 的签名 URL 这一轮回 401（上一轮是 TLS 抖与 403），所以上面只引 step 状态
+与耗时，不代 runner 报条数。
 
 **代码 > 本文档**：本文与 `js/`、`tools/` 冲突时，以代码和它跑出来的输出为准。
 
@@ -81,6 +104,8 @@ browser job 跑在 Node 22，那两个版本上的第一手证据就是那一跑
 | 命中几何只在真浏览器里可证 | `[hit]` 腿：每个 `pointFor(k)` 的客户端坐标必须 `elementFromPoint` 命中画布本身，且 `depthAt` 只认高度不认横坐标 |
 | 换皮真的换了像素 | `[theme]` 腿：读 `--plate` 的 computed 值，再读画布上盘子位置的像素，两者对齐；切亮色时盘子像素必须移动而焦边像素不动 |
 | 窄屏不是把桌面压扁 | 同一条 `layout` 腿在 `Emulation` 的 380×780@2 视口里再跑一遍，并且先断言覆写真的生效（视口 ≤ 520 且 dpr ≥ 2） |
+| 暂停真的把仿真冻住 | `[pause]` 腿按玩家那枚 `#btn-pause`：`view.animProgress()` 必须**逐位停在按下那一刻**、画布上那张饼的像素不变；恢复走键盘 `p`，判据是"恢复后视觉上多走的 ≤ 恢复之后**实测**过去的那段时间 + 一帧余量"——式子挂在 CSS 的 `--dur-flip` 与两个 `performance.now()` 实测值上，不挂 340 / 40 这种抄来的数（共享 runner 上 `setTimeout` 会漂，写死的带会把一台慢机器判成缺陷）。K1 刀（不后移 `anim.start`）红这一条，读数 `视觉上 340ms / 恢复后又过了 42ms`；K2 刀（标志位不落地）红 7 行，含按钮字形与 `aria-pressed` |
+| 量具真的对着本仓发力 | preflight 读的不是"`window.pancake` 在不在"，而是腿真正要读的八个字段（`version/engine/state/go/view/optimal/hint/solveAll`）。K3 刀把台面换成半个对象 ⇒ boot 那一行就点名 `missing:version,engine,…` 并停止开腿，不再放行到 13 条腿里各自抛 TypeError 交回 0 条断言。三把刀在 `_tmp-pancake-knife-r3.log`，`K1 GATE_RC=1 · 点名行=1`／`K2 GATE_RC=1 · 点名行=7`／`K3 GATE_RC=1 · 点名行=1` |
 
 浏览器闸跑**两种 URL 形态**：`server.cjs` 把仓库当文档根（`http://127.0.0.1:5266/`），以及
 Pages 的形状（一个只含符号链接的目录做根，仓库在路径的一段下面）。只有第二种能看见"绝对
@@ -114,3 +139,53 @@ SHOTS=v1 ./tools/verify.sh          # 顺手写 tools/shots/*.png
 - 六层焦边是出货的最重焦边阵（46 080）；七层焦边 645 120 个局面没进表，也没进 CI 的墙钟。
 - 浏览器闸需要本机有 Chrome（或设 `CHROME_BIN`）。它读画布像素、发真指针事件，所以没有 jsdom 替代。
 - 提示给的是答案不是方向：一旦用过，这一关在这一台机器上就永久带标记。这是设计，不是 bug。
+- **暂停冻的是仿真，不是模型**。本仓没有计时器，唯一持续推进的仿真就是翻牌那一段缓动（`anim.t` 靠
+  `performance.now()` 的差推进），所以暂停 = 停掉 rAF 心跳、恢复时把 `anim.start` 后移暂停时长。
+  按下暂停后**仍然下得去手**：那一铲走 `view.animateFlip` 的暂停分支直接落定、不排缓动（`[pause]` 腿
+  把这两条都写成断言，改天想挡输入得先改这条边界）。
+
+## 上线的到底是哪一批文件
+
+这个仓没有打包器：站点=一次文件拷贝。以前「拷哪些」写在 `pages.yml` 的 `run:` 里（手抄的几行
+`cp`）。本地 `index.html` 直读仓库根，永远自洽；线上却按那份清单拷，于是页面后来引用的
+`manifest.webmanifest`、`sw.js`、`icons/*` 可能一个都没上去——线上 404，而仓里的引擎测试与
+真浏览器闸全绿，因为它们跑的都是仓库根，没有任何一步在「按清单拷」的那个环境下加载过页面。
+
+现在清单只有一份，住在 `tools/assemble-site.sh`：CI 调它拷 `_site`，本地闸调它拷临时目录，
+然后**对拷出来的产物**提要求（`tools/deploy-set.mjs`）：
+
+- **W 清单与页面同源**：`pages.yml` 里必须真有 `run: bash tools/assemble-site.sh <dir>` 这一行，
+  `ci.yml` 里必须真有 `run: node tools/deploy-set.mjs`。认的是调用那一行，不是文件里出现过这个
+  路径——注释里本来就会写它，只 grep 字符串会被一句散文喂绿。
+- **R 引用可达**：引用不靠手打名单。从 `index.html` 的 `href/src` 出发，凡解析出来是 `.js`/`.css`
+  的就把那一站也扫一遍（CSS 的 `url()`、JS 去掉注释后的 `'./…'` 字面量、`new URL(x, base)` 的两种
+  基、`navigator.serviceWorker.register`、`scope`），`manifest` 的 icons/screenshots/shortcuts 各自
+  的 `src` 也算引用。取径上读不到的那一站本身就是红（读不到＝这一站根本没扫）。每条引用都必须在
+  产物里且非 0 字节；绝对路径单列一条红，因为 Pages 挂在 `/<repo>/` 前缀下会跳出去。
+- **P 位图不许说谎**：`manifest` 声明的 `sizes` 必须等于 PNG IHDR 的真实宽高——文件图标读文件头，
+  内联成 base64 的图标先解码再读同一段。后一条不是可选项：图标可能住在清单里而不是盘上的 `.png`
+  （有的仓另有一条"零二进制文件"的承诺，那条只约束"有没有 .png 这个文件"）；如果 P 段只筛文件名，
+  声明写 512 而真图 192 就一路放行。
+- **钉住两个数**：R 段实际检查的路径条数（`32`）与这一次跑的断言条数（`50`），两个数
+  都钉在 `tools/deploy-set.mjs` 顶部的那对常量里。没改页面却掉了，说明解析断了；删掉一张图标会同时
+  少一条 R10 与那张的 P1/P2，所以两个数一起钉，断言条数能漂就是闸在缩水的信号。这一节故意只写数值、
+  不写那对常量的名字，也不写别仓文档闸的编号：有的仓的文档闸会拿"文档里出现过的同名标识号"回数它
+  自己的条数，还有的会把文档里点到的每个组编号逐个核对"这一轮真的发过"——两道闸共用一个名字，
+  或者在本仓的文档里出现一个本仓没有的组编号，打红的都是不相干的那一边。
+
+`tools/deploy-set-selftest.mjs` 是这两颗钉的阳性证明：它把仓库复制到临时目录，照着每一类断言
+各下一刀（X1 清单不收位图目录 / X2 模块边改名 / X3 CSS 写绝对路径 / X4 `start_url` 绝对 /
+X5 删光 >=512 图标 / X6 少一个必填字段 / X7 声明尺寸与真图不符 / X8 workflow 不调脚本 /
+X9 CI 不跑闸 / X10 是阴性对照——往入口 JS 追加一行只写在注释里的假路径，闸必须仍然绿、条数仍然
+`32`、断言仍然 `50`；X11 og:image 退回相对路径 / X12 og:image 的前缀指向别的 slug /
+X13 内联位图谎报尺寸——只在有靶子时下：X11/X12 要页面上那句 og:image，X13 要清单里真有一段 base64
+图标，没有就打印 SKIP；反过来 X1 没有位图目录可砍时改砍 css，P 段一位都不核时台架直接报靶子不够），
+要求每一刀都让闸**点名**变红。靶子从 `DEPLOY_SET_DUMP=1`
+的出处表现挑（取径真的会读的那支 JS / 那一张 CSS，不写死某一个仓的入口名），所以页面改了、仓与仓
+不同，台架跟着走。
+
+`node tools/deploy-set.mjs` 与 `node tools/deploy-set-selftest.mjs` 就是 CI 跑的那两条命令本身
+（package.json 里的 `deploy-set` / `deploy-set:selftest` 只是同一支脚本的 npm 入口）；本仓的整闸在 `tools/verify.sh` 的 `=== deploy-set ===` 那一段也各跑一次。它们红的时候并进本仓那条出口的退出码——这一条是这么证的：
+把 ci.yml 里那行 `run: node tools/deploy-set.mjs` 砍掉，本仓整闸必须点名红且退出码非 0。
+所以「本地全绿、线上 404 自己的 manifest / sw.js / 图标」这一类坏法在本地就会红。
+

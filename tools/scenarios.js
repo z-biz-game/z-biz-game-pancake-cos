@@ -56,11 +56,24 @@
   const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   const px = (x, y) => A().view.pixels(x, y);
 
+  // The witness is the surface the legs actually read, not just `version`. main.js once grew a
+  // second `window.pancake = {...}` at its tail, which kept the object alive but dropped
+  // engine/go/state/view — and `version` alone cannot see that.
+  const SURFACE = ['version', 'engine', 'state', 'go', 'view', 'optimal', 'hint', 'solveAll'];
+  const missingSurface = () => SURFACE.filter((k) => {
+    const v = w.pancake ? w.pancake[k] : undefined;
+    return v === undefined || v === null;
+  });
   async function ready() {
     for (let i = 0; i < 200; i++) {
-      if (w.pancake && w.pancake.version) return true;
+      if (w.pancake && w.pancake.engine && w.pancake.engine.TIERS && missingSurface().length === 0) return true;
       await wait(50);
     }
+    // A leg that cannot reach the page must say so *as a row*: the harness counts rows, and an
+    // empty report reads as "the gate crashed" instead of naming the missing surface.
+    ck('window.pancake 台面完整（腿要读的字段都在）', false,
+      w.pancake ? '缺 ' + missingSurface().join(',') + ' · 台面上只有 ' + Object.keys(w.pancake).join(',')
+        : 'js/main.js never exposed window.pancake');
     return false;
   }
 
@@ -358,6 +371,89 @@
     }
     eq('宽度随尺寸单调、纵坐标递增（违例数）', bad, 0);
     return report({ path: path.join('>') });
+  };
+
+  // ---------- pause ----------
+  // 这一腿验"暂停真的把仿真冻住"那句话：进度停在按下那一刻、恢复那一帧不跳完憋下的时间、
+  // 这一铲最终落定。判据只读页面自己的量（view.animProgress / view.busy / canvas 像素 /
+  // #btn-pause 的无障碍属性），阈值挂在 CSS 的 --dur-flip 与**实测经过的时间**上：
+  // "恢复后视觉上多走的 ≤ 恢复之后真正过去的 gap + 一帧"这条式子跟着这台机器走，
+  // 不跟着 340 / 40 这种抄来的数走（共享 runner 上 setTimeout 会漂，写死的带会把慢机器判成缺陷）。
+  const pause = async () => {
+    if (!(await ready())) return report();
+    const baked = E().LOTS.filter((r) => r.par >= 4)[0];
+    ck('找得到 par≥4 的关（两铲之后不会直接赢）', !!baked, E().LOTS.map((r) => r.par).join(','));
+    if (!baked) return report();
+    ck('这一腿要有真的翻牌缓动', !A().view.reduced,
+      'view.reduced=true：reduced-motion 或 ?motion=off 之下 span=1ms，缓动一帧就走完，"冻住"无从可验');
+    const spanMs = Number((token('--dur-flip') || '').replace('ms', '')) || 340;
+    ck('缓动时长读得到且不是一帧', spanMs > 50, `--dur-flip=${token('--dur-flip')}`);
+    if (A().view.reduced || spanMs <= 50) return report({ spanMs });
+    await goto(baked.id);
+    const c0 = A().state.count;
+    tapNow(A().optimal()[0]);                    // 真指针下的手，不等收尾
+    const wTap = performance.now();
+    await wait(60);                              // 让缓动走到中段，而不是停在 t=0
+    const sinceTap = performance.now() - wTap;
+    ck('这一铲还在飞', A().view.busy, 'view.busy=false：动画已经落地，暂停无从可冻');
+    const tPause = A().view.animProgress();
+    // "中段"跟着**实测的下手时长**走，不跟着 60 这个数走：共享 runner 上 setTimeout(60) 可能真的
+    // 过去 200ms，那时 t=0.6 仍然算中段；写死 0.05~0.9 就把一台慢机器判成缺陷。
+    ck('暂停发生在缓动中段（既不是起点也不是终点）',
+      tPause !== null && tPause > 0 && tPause < 1, `t=${tPause} · 下手后 ${sinceTap.toFixed(0)}ms`);
+    const p = A().view.pointFor(A().state.moves[c0]);
+    const pxBusy = px(p.rect.x + p.rect.w / 2, p.rect.y + p.rect.h / 2).join(',');
+    $('#btn-pause').click();                     // 按玩家那枚按钮，不直接叫动词
+    const w0 = performance.now();
+    await wait(Math.max(150, Math.round(spanMs * 0.7)));
+    const waited = performance.now() - w0;
+    ck('暂停期间真的憋了一段时间', waited >= 150,
+      `只等了 ${waited.toFixed(0)}ms：等待没跨过终点，"冻住"与"走完了"分不开`);
+    eq('进度冻在按下那一刻', A().view.animProgress(), tPause);
+    ck('暂停中没有偷偷落地', A().view.busy, 'view.busy 掉了：暂停把这一铲直接做完了');
+    eq('画布上那张饼没再动', px(p.rect.x + p.rect.w / 2, p.rect.y + p.rect.h / 2).join(','), pxBusy);
+    eq('按钮说「继续」', $('#btn-pause').getAttribute('aria-label'), '继续');
+    eq('按钮标出按下态', $('#btn-pause').getAttribute('aria-pressed'), 'true');
+    eq('按钮字形换成播放', $('#btn-pause').textContent.trim(), '▶');
+    ck('台面读到的暂停态与按钮一致', A().isPaused() === true && A().state.paused === true,
+      `${A().isPaused()}/${A().state.paused}`);
+    // 恢复：view.setPaused 把 anim.start 后移暂停时长，所以暂停期间不产生视觉进度。
+    const w1 = performance.now();
+    key('p');                                    // 键盘那条绑定也走一次
+    await wait(40);
+    const gap = performance.now() - w1;
+    const tResume = A().view.animProgress();
+    const jumped = tResume === null ? spanMs : (tResume - tPause) * spanMs;
+    // 允许走完的只有"恢复之后真正过去的时间"（再加一帧的余量）；多出来的那一段就是被憋下的暂停
+    // 时长一次性灌进来的。上限挂在实测的 gap 上而不是 waited/2 上——慢机器上这 40ms 可能真的
+    // 过去 200ms，那时走完 200ms 是物理正确，不是缺陷。
+    ck('恢复那一帧没有把憋下的时间一次灌进来', jumped <= gap + 60,
+      `视觉上走了 ${jumped.toFixed(0)}ms / 恢复后又过了 ${gap.toFixed(0)}ms（暂停憋了 ${waited.toFixed(0)}ms）：anim.start 没后移（或直接落地）`);
+    ck('进度没有倒退', tResume === null || tResume >= tPause, `${tPause} → ${tResume}`);
+    eq('键盘也把按钮复原', $('#btn-pause').getAttribute('aria-pressed'), 'false');
+    ck('这一铲最终落定', await settle(), 'view.busy never cleared');
+    eq('暂停没有吞掉这一步', A().state.count, c0 + 1);
+    eq('HUD 跟上步数', text('#hud-moves'), String(c0 + 1));
+    // 暂停中下的手：animateFlip 直接落定、不排缓动。这是"冻的是仿真不是模型"这句决定的形状，
+    // 所以把它写成断言而不是注释——改天有人让暂停期继续排动画，这条会红。
+    const c1 = A().state.count;
+    $('#btn-pause').click();
+    tapNow(A().optimal()[0]);
+    await wait(40);
+    ck('暂停中下手不排缓动', !A().view.busy && A().view.animProgress() === null,
+      `busy=${A().view.busy} t=${A().view.animProgress()}`);
+    eq('暂停中那一下仍然记步', A().state.count, c1 + 1);
+    $('#btn-pause').click();
+    eq('按钮回到「暂停」', $('#btn-pause').getAttribute('aria-label'), '暂停');
+    A().setPaused(true); A().setPaused(true);
+    eq('重复暂停不退态', A().isPaused(), true);
+    A().setPaused(false);
+    eq('再按一次解除', A().isPaused(), false);
+    return report({
+      id: baked.id, spanMs,
+      sinceTapMs: Math.round(sinceTap), tPause: Number(tPause.toFixed(3)),
+      waitedMs: Math.round(waited), gapMs: Math.round(gap), jumpedMs: Math.round(jumped),
+    });
   };
 
   // ---------- reject ----------
@@ -867,5 +963,5 @@
     return report({ vw, dpr: g.dpr, narrow });
   };
 
-  w.__ng = { boot, table, menu, play, reject, hint, hit, save, reloaded, theme, win, layout };
+  w.__ng = { boot, table, menu, play, pause, reject, hint, hit, save, reloaded, theme, win, layout };
 })(window);

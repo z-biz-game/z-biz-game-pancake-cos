@@ -28,7 +28,7 @@ REPO=$(basename "$HERE")
 # failing leg into "see the log that no longer exists". .gate/ is gitignored.
 LOGD=${LOG_DIR:-$HERE/.gate}
 mkdir -p "$LOGD"
-PORT=${CDP_PORT:-9386}
+PORT=${CDP_PORT:-9386}; if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo ":$PORT is already LISTENING — a sibling gate or an orphan Chrome holds it; attaching there reads someone else's browser. Wait for it to finish, or rerun with CDP_PORT=<a free port>." >&2; lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true; exit 6; fi  # 一机一台：撞在同一个默认口上时不报错的是 Chrome，报错的是绿——先让路再开闸
 # 5173 is Xcode/ashen-ring's default and a long-lived server there will happily serve a *different*
 # app, so this harness runs on its own ports. Other agents in the farm run their own verify.sh at
 # the same time; 5266 (root), 5267 (prefix) and 9386 (CDP) are pancake's and nothing else's.
@@ -45,11 +45,16 @@ fi
 [ -x "$CHROME" ] || { echo "no Chrome found; set CHROME_BIN" >&2; exit 2; }
 
 FAILED=0
-LEG_NAMES="boot table menu play reject hint hit save reloaded theme win layout"
+LEG_NAMES="boot table menu play pause reject hint hit save reloaded theme win layout"
 # The data gate first: it is 38 ms, and a shipped par that the graph disagrees with should stop the
 # run before a browser is even started.
 echo "=== bake --check ==="
 if node "$HERE/tools/bake.mjs" --check 2>&1 | tail -6 | sed 's/^/  /'; then :; else FAILED=1; fi
+# 部署集闸：ci.yml 跑这两步、本地整闸以前一次都不跑（59 仓同形）。「本地全绿、线上 404 自己的
+# manifest / sw.js / 图标」这一类坏法缺的就是这一步。和 bake 一样，它不碰 Chrome，红在起浏览器之前。
+echo "=== deploy-set ==="
+node "$HERE/tools/deploy-set.mjs" || FAILED=1
+node "$HERE/tools/deploy-set-selftest.mjs" || FAILED=1
 
 SPID=0
 PROOT=""
@@ -158,13 +163,21 @@ run_shape() {
   export BASE_URL="$BASE"
   node tools/playtest.cjs open "$BASE" | head -3
 
+  # The witness asks for the fields the legs actually read, and it has to tell "no handle at all"
+  # apart from "handle without the engine". main.js once grew a second `window.pancake = {...}` at its
+  # tail: the object was still there and `version` was still readable, so this loop "passed" and every
+  # leg then died on a TypeError before pushing a row — 13 legs, 0 checks, three red CI runs.
+  SURVEY='(function(){var s=["version","engine","state","go","view","optimal","hint","solveAll"];var p=window.pancake;if(!p)return "nope";var m=s.filter(function(k){return p[k]===undefined||p[k]===null});if(m.length)return "missing:"+m.join(",");return p.version+"/"+p.engine.TIERS.length})()'
   BOOT=""
   for i in $(seq 1 60); do
-    BOOT=$(node tools/playtest.cjs eval "window.pancake?window.pancake.version:'nope'" nonav 2>/dev/null | tr -d '\n" ')
-    case "$BOOT" in *nope*|"") sleep 0.5 ;; *) break ;; esac
+    BOOT=$(node tools/playtest.cjs eval "$SURVEY" nonav 2>/dev/null | tr -d '\n" ')
+    case "$BOOT" in nope|missing:*|"") sleep 0.5 ;; *) break ;; esac
   done
   echo "boot: pancake $BOOT at $BASE"
-  [ "$BOOT" = "nope" ] && { echo "window.pancake never appeared at $BASE" >&2; return 4; }
+  case "$BOOT" in
+    nope) echo "window.pancake never appeared at $BASE" >&2; return 4 ;;
+    missing:*) echo "window.pancake at $BASE is missing the fields the legs read ($BOOT) — the handle was replaced by a smaller one; fix js/main.js before anything else" >&2; return 4 ;;
+  esac
 
   local bad=0 N=0
   for s in ${SCENARIOS:-$LEG_NAMES}; do
@@ -226,7 +239,7 @@ run_shape() {
 
 if [ -n "${BASE_URL:-}" ]; then
   SHAPES_TO_RUN="custom"
-  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP :$PORT）"
+  echo "BASE_URL given → 只跑部署件这一种形态，本脚本不起任何服务（CDP :${PORT}）"
 else
   SHAPES_TO_RUN=${SHAPES:-root prefix}
 fi

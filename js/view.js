@@ -310,6 +310,23 @@ export function createView(canvas, opts = {}) {
     get reduced() {
       return reduce;
     },
+    setPaused(v) {
+      v = !!v;
+      if (v === paused) return paused;
+      paused = v;
+      if (v) {
+        pausedAt = performance.now();
+        if (raf) cancelAnimationFrame(raf);
+        raf = null;                            // 心跳停掉，anim.t 冻结在暂停那一刻
+      } else if (anim) {
+        // 关键：把起算点后移暂停时长，恢复后的 (ts - anim.start) 与暂停前连续 ⇒ 无跳变
+        anim.start += performance.now() - pausedAt;
+        raf = requestAnimationFrame(tick);
+      }
+      return paused;
+    },
+    isPaused: () => paused,
+    animProgress: () => (anim ? anim.t : null),
     // True while a flip is mid-air. The gate waits on this instead of on a sleep, so "the animation
     // finished" is an observation and not an assumption about how long rAF takes in headless Chrome.
     get busy() {
@@ -385,6 +402,7 @@ export function createView(canvas, opts = {}) {
     },
     // After the model has flipped: run the visual catch-up, then hand control back.
     animateFlip(k, done) {
+      if (paused) { if (done) done(); return; }   // 暂停中直接落定，不排动画
       if (reduce || !k) {
         want();
         if (done) done();

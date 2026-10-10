@@ -671,6 +671,8 @@ const api = {
       animT: view.animProgress(),
       fullscreen: !!document.fullscreenElement,
       sound: audio.enabled,
+      // 暂停态挂在同一个 state 上：[pause] 腿既读按钮的 aria-pressed，也读这里，两边必须一致。
+      paused,
       records: Object.keys(progress.levels).length,
       salvaged: progress.salvaged || 0,
       problems: store.problems,
@@ -703,6 +705,121 @@ const api = {
   pause: (v) => setPaused(v === undefined ? !paused : v),
   fullscreen: () => toggleFullscreen(),
   begin: (id) => navigate(id),
+  // 暂停的三个动词挂在这**同一个**台面上：见文件末尾那段——第二次 `window.pancake = {...}`
+  // 会把这个对象整个换掉，而闸读的 engine / go / hint / solveAll 全在换掉的那一半里。
+  setPaused,
+  togglePause,
+  isPaused,
 };
 
 window.pancake = api;
+
+// ---- 全屏开关（#btn-fullscreen）----
+// 绑的是本页 HUD 上真实存在的那个按钮。全屏最常见的假实现就是引用一个并不存在的
+// id：点下去什么也不会发生，量具却算它"已实现"。所以这里找不到按钮就直接不装。
+(function bindFullscreen() {
+  const btn = document.getElementById('btn-fullscreen');
+  if (!btn) return;
+  const root = document.documentElement;
+  // 只做特性检测，不嗅探 UA：iOS Safari 是 webkitRequestFullscreen，老 Edge 是 ms 前缀，
+  // 而 UA 字符串随时会改。"有没有这个能力"是查出来的，不是猜出来的。
+  const req = root.requestFullscreen || root.webkitRequestFullscreen || root.msRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+  const current = () => document.fullscreenElement || document.webkitFullscreenElement
+    || document.msFullscreenElement || null;
+
+  // 不支持也要给个说法：只把按钮灰掉而不解释，玩家会以为这功能没做完。
+  // supported 这枚标记不能省：下面 sync() 每次都会重写 title，不挡住的话，装的时候刚写
+  // 进去的人话原因会被随后的 sync() 立刻抹成"全屏 (F)"——禁用就变成一句没有理由的禁用。
+  let supported = !!req;
+  const unsupported = () => {
+    supported = false;
+    btn.disabled = true;
+    btn.title = '这个浏览器不提供元素全屏（iOS Safari 请用「添加到主屏幕」独立打开）';
+  };
+  if (!req) unsupported();
+
+  // fullscreen 返回 Promise，被拒时必须吃掉：iOS Safari 对多数非 video 元素直接拒绝，
+  // 让这个 rejection 冒泡出去会变成一条未捕获错误，整局游戏跟着挂。
+  const settle = (p) => { if (p && p.catch) p.catch(unsupported); };
+
+  // 进出都能走：已经全屏时这次调用是退出，不是"再进一次"。
+  function toggle() {
+    try {
+      if (current()) {
+        if (exit) settle(exit.call(document));
+      } else if (req) {
+        settle(req.call(root));
+      } else {
+        unsupported();
+      }
+    } catch (e) {
+      unsupported();
+    }
+  }
+
+  // Esc 和系统手势退出都不经过我们的代码，按钮状态只能靠 fullscreenchange 回写，
+  // 否则用户已经退出、HUD 还停在"退出全屏"，下一次点击反而会重新进全屏。
+  function sync() {
+    const on = !!current();
+    btn.setAttribute('aria-pressed', String(on));
+    // 图标按钮不换字形（换字形会把 HUD 的视觉语言换掉），改成把可读名与提示写回无障碍属性。
+    const say = on ? "退出全屏" : "全屏";
+    btn.setAttribute('aria-label', say);
+    if (supported) btn.title = say + '（F）';
+    const body = document.body;
+    if (body && body.classList) body.classList.toggle('fullscreen', on);
+  }
+
+  btn.addEventListener('click', toggle);
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'f' && ev.key !== 'F') return;
+    const t = ev.target;
+    // 盘号 / 种子这类输入框里打字不能触发全屏，否则玩家输 seed 输到一半屏幕没了。
+    if (t && /input|textarea|select/i.test(t.tagName || '')) return;
+    if (ev.repeat || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    ev.preventDefault();
+    toggle();
+  });
+  window.addEventListener('fullscreenchange', sync);
+  window.addEventListener('webkitfullscreenchange', sync);
+  window.addEventListener('MSFullscreenChange', sync);
+  sync();
+})();
+
+// ---- 暂停：真的把仿真冻住 ----
+//
+// 本仓没有计时器，唯一持续推进的仿真是 view.js 里那次翻牌缓动（anim.t 靠 performance.now()
+// 的时间戳差推进）。所以暂停直接交给 view.setPaused()：它停掉 rAF 心跳把 anim.t 冻在暂停那一刻，
+// 恢复时把 anim.start 后移暂停时长，剩余时长原样接着走 —— 既不丢进度，也没有恢复尖峰。
+// 用 var 不用 let：本段在文件末尾，view 早已建好，但 let 的 TDZ 在被别处提前调用时会直接抛。
+var paused = false;
+function setPaused(v) {
+  v = !!v;
+  if (v === paused) return paused;
+  paused = view.setPaused(v);
+  // topbar-actions 一排都是 38×34 的 .icon 按钮，所以这里也用图标约定：
+  // 字形 ⏸/▶ 切换，aria-label 与 title 始终写明"按下去会发生什么"，aria-pressed 给出当前开关态。
+  var b = document.getElementById('btn-pause');
+  if (b) {
+    b.setAttribute('aria-pressed', String(paused));
+    b.textContent = paused ? '▶' : '⏸';
+    b.setAttribute('aria-label', paused ? '继续' : '暂停');
+    b.title = paused ? '继续 (P)' : '暂停 (P)';
+  }
+  return paused;
+}
+function togglePause() { return setPaused(!paused); }
+function isPaused() { return paused; }
+
+document.getElementById('btn-pause').addEventListener('click', togglePause);
+window.addEventListener('keydown', function (ev) {
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.target && /input|textarea|select/i.test(ev.target.tagName)) return;
+  if (ev.key === 'p' || ev.key === 'P') { ev.preventDefault(); togglePause(); }
+});
+
+// 台面只有一个：上面那个 `window.pancake = api`。这里再赋一次会把整个对象换掉，
+// 于是 api 里的 engine / go / hint / solveAll / bootAt / version 全部消失，
+// 而浏览器闸的每条腿都从那些字段起步（136893d 就这么把 13 条腿打成 0 条断言，CI 连红三次）。
+// 暂停的动词已经挂在 api 上，缓动进度在 state 里，量尺读数走 A().view（pixels/geom/busy/animProgress）。

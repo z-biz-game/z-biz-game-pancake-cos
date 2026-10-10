@@ -659,15 +659,67 @@ summary {
   }
 }
 
-html[data-motion='reduce'] {
-  --dur: 1ms;
-  --dur-flip: 1ms;
+/* 中央分发：safe-area 兜底 */
+
+/* ---------- safe-area：刘海与主屏条不吃掉按钮（中央分发，akari-cos 同口径） ---------- */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+html, body {
+  padding-left: var(--sal);
+  padding-right: var(--sar);
+}
+body {
+  padding-top: var(--sat);
+  padding-bottom: var(--sab);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+/* 贴边的固定/吸底元素自己让开主屏条，别让 home indicator 压住按钮 */
+.fixed-bottom, .bottom-bar, .hud-bottom, footer.app-footer {
+  padding-bottom: calc(var(--sab) + env(safe-area-inset-bottom, 0px));
 }
 
-html[data-motion='reduce'] *,
-html[data-motion='reduce'] *::before,
-html[data-motion='reduce'] *::after {
-  animation-duration: 1ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 1ms !important;
+
+/* ============================================================
+   44px 触摸命中下限（Apple HIG 手机可用性底线）
+   每个真正可点的元素都要有 ≥44×44 CSS px 的命中盒。
+   min-height / min-width 是**硬下限**：只会把过小的盒子撑到 44px，
+   本来就够大的控件（宽药丸、整行列表项、大数字键）外形一点不变。
+
+   两处非平凡之处：
+   1) 需要 !important —— 各组件自己有 `.shelf button { min-width: 34px }`
+      这类更"贴身"的规则，类选择器的优先级高于任何标签堆叠，
+      不加的话这条底线会被组件规则逐个抵消。
+   2) 先把 --touch-min 定死：tapa / nurikabe 早就写了
+      `min-height: var(--touch-min)`，但全仓没有任何地方定义过这个变量，
+      无 fallback 的 var() 在计算值阶段整条作废 —— 那是个看着像 44px、
+      实际什么都不保证的死规则。这里补上定义，让它们原本的意图真正成立。
+   ============================================================ */
+:root { --touch-min: 44px; }
+button,
+select,
+input,
+textarea,
+a[href],
+[role="button"] {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   线上实测（https://z-biz-game.github.io/z-biz-game-pancake-cos/，CDP setDeviceMetricsOverride
+   dpr=3，读数在 _tmp-live-sweep-r19.log）：320×640 报 vw=356≠320——布局视口被页面自己撑宽。
+   #topbar 是 auto 1fr auto 三列网格，中间那格的副标题「前缀翻转排序 · 每关 par 都是量出来的」
+   在 12px + 0.22em 字距下要点 260px 才排得下，加上左右两栏的 44px 图标按钮（#topbar-actions
+   一行 200px），320 装不下 → #topbar-actions 落在 x=156..356、#btn-fullscreen 整枚在屏幕外。
+   44px 的下限不动，把动作条挪到自成一行：标题那一行还留 1fr，副标题本来就按 <p> 折行。
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 420px) {
+  #topbar { grid-template-columns: auto 1fr; row-gap: 8px; }
+  #title-block { min-width: 0; }
+  #topbar-actions { grid-column: 1 / -1; flex-wrap: wrap; row-gap: 6px; }
 }

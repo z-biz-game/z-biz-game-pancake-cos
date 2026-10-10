@@ -1,14 +1,12 @@
-// 注册离线壳。整段包在协议判断里：file:// 打开（把仓库拷下来双击 index.html）时
-// navigator.serviceWorker 是在的，但 origin 为 null，注册一定抛 —— 那不是玩家的错，
-// 不该在控制台留一条红。注册失败同样静默：游戏本身能跑就是能玩。
 'use strict';
-
-if (
-  typeof navigator !== 'undefined' &&
-  'serviceWorker' in navigator &&
-  /^https?:$/.test(location.protocol)
-) {
+// service worker 注册：只在 http/https 下做。
+//
+// file:// 直接打开（双击 index.html、或把仓库 zip 解开看）时 navigator.serviceWorker
+// 要么不存在、要么 register 必抛 SecurityError。那不是玩家的错，不该在控制台上留一条
+// 红字，更不该让后面真正该跑的 main.js 因为这条未捕获异常被中断。
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // 相对 sw.js 而不是绝对 /sw.js：Pages 的项目站挂在 /<repo>/ 子路径下。
+    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
   });
 }
