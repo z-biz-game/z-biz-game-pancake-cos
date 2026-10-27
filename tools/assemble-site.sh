@@ -18,7 +18,8 @@ cd "$HERE" || exit 2
 cp index.html manifest.webmanifest sw.js "$DEST/"
 cp -r css js "$DEST/"
 # 位图目录名不统一（icons/ 与 assets/ 都在用）：按存在与否收，缺的那个不是错误。
-for d in icons assets; do
+# art/ 是台面纹理与社交卡（`css/studio.css` 里的 ../art/*、页面 og:image），线上也要。
+for d in icons assets art; do
   [ -d "$d" ] && cp -r "$d" "$DEST/"
 done
 

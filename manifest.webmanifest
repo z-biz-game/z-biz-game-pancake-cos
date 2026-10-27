@@ -1,7 +1,7 @@
 {
   "name": "烙饼 · PANCAKE",
   "short_name": "烙饼 · PANCAKE",
-  "start_url": ".",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#0a0a12",
   "theme_color": "#0a0a12",
@@ -21,6 +21,14 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "scope": "./",
+  "id": "./"
 }

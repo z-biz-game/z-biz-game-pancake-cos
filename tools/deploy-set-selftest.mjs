@@ -157,11 +157,11 @@ function knife(tag, want, mutate, note) {
 let bad = 0;
 
 // X1 清单落后于页面：assemble 少收一类文件，产物里没有它而页面会去要。
-// 有位图目录（这一仓 55/59 走 icons/，2 个走 assets/）就砍那个 for 循环，期望由靶子自己决定，
-// 两个目录名都在针里；内联位图的仓没有位图目录可砍，就砍无条件那行的 css。
+// 有位图目录（这一仓 55/59 走 icons/，2 个走 assets/，社交卡与台面纹理走 art/）就砍那个 for 循环，
+// 期望由靶子自己决定，三个目录名都在针里；内联位图的仓没有位图目录可砍，就砍无条件那行的 css。
 if (pngRefs.length) {
   if (!knife('X1 assemble 不收位图目录', ['R10', path.basename(pngRefs[0].target)], (dir) => {
-    edit(dir, 'tools/assemble-site.sh', 'for d in icons assets; do', 'for d in probe_missing_dir; do');
+    edit(dir, 'tools/assemble-site.sh', 'for d in icons assets art; do', 'for d in probe_missing_dir; do');
   })) bad += 1;
 } else {
   if (!cssRefInArtifact) {
