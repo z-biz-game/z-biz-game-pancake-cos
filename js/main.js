@@ -648,11 +648,11 @@ const api = {
       motion: motion.reducedMotion,
       motionSource: motion.source,
       paused,
-      animT: view.animProgress(),
+      // The frame harness reads one number per checkpoint and treats 0 as "at rest"; the view's own
+      // animProgress() uses null for that same fact, so the serialised readout maps it back here.
+      animT: view.animProgress() ?? 0,
       fullscreen: !!document.fullscreenElement,
       sound: audio.enabled,
-      // 暂停态挂在同一个 state 上：[pause] 腿既读按钮的 aria-pressed，也读这里，两边必须一致。
-      paused,
       records: Object.keys(progress.levels).length,
       salvaged: progress.salvaged || 0,
       problems: store.problems,
@@ -792,12 +792,8 @@ function setPaused(v) {
 function togglePause() { return setPaused(!paused); }
 function isPaused() { return paused; }
 
-document.getElementById('btn-pause').addEventListener('click', togglePause);
-window.addEventListener('keydown', function (ev) {
-  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
-  if (ev.target && /input|textarea|select/i.test(ev.target.tagName)) return;
-  if (ev.key === 'p' || ev.key === 'P') { ev.preventDefault(); togglePause(); }
-});
+// 绑定在上面 `// ---------- controls ----------` 那段：那里已经给 #btn-pause 挂了 click、给键盘挂了 p。
+// 这里再挂一遍等于同一下手翻两次（合并两条演化线时留下的第二份），暂停会立刻被自己解开。
 
 // 台面只有一个：上面那个 `window.pancake = api`。这里再赋一次会把整个对象换掉，
 // 于是 api 里的 engine / go / hint / solveAll / bootAt / version 全部消失，

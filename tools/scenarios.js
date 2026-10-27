@@ -434,15 +434,19 @@
     ck('这一铲最终落定', await settle(), 'view.busy never cleared');
     eq('暂停没有吞掉这一步', A().state.count, c0 + 1);
     eq('HUD 跟上步数', text('#hud-moves'), String(c0 + 1));
-    // 暂停中下的手：animateFlip 直接落定、不排缓动。这是"冻的是仿真不是模型"这句决定的形状，
-    // 所以把它写成断言而不是注释——改天有人让暂停期继续排动画，这条会红。
+    // 暂停中下的手：输入被拒（模型不前进、不排缓动），而且要给出解释而不是静默吞掉。
+    // 这条与 test/app_frame.test.mjs 的「暂停期间铲子拒绝再翻」是同一份产品决定：暂停键一按，
+    // 盘面只认这一种结果——手停下、字说出来。
     const c1 = A().state.count;
+    clearToast();
     $('#btn-pause').click();
     tapNow(A().optimal()[0]);
     await wait(40);
     ck('暂停中下手不排缓动', !A().view.busy && A().view.animProgress() === null,
       `busy=${A().view.busy} t=${A().view.animProgress()}`);
-    eq('暂停中那一下仍然记步', A().state.count, c1 + 1);
+    ck('暂停中下手被拒并且解释', A().state.count === c1 && $('#toast').classList.contains('on') &&
+      text('#toast').includes('已暂停'),
+      `count=${A().state.count}/${c1} toast=${text('#toast')}`);
     $('#btn-pause').click();
     eq('按钮回到「暂停」', $('#btn-pause').getAttribute('aria-label'), '暂停');
     A().setPaused(true); A().setPaused(true);
@@ -761,6 +765,10 @@
     A().setTheme('dark');
     await wait(80);
     eq('暗色写进了 html', document.documentElement.dataset.theme, 'dark');
+    // 键盘焦点会把铲刃 sprite 停在第一刀上，那张 720×96 的贴图压住下一张饼的顶边——而焦边取样点
+    // 恰好在那条边上。先把切线下掉，盘面像素才是饼自己的颜色；这条腿量的是配色不是铲子。
+    A().view.preview(null);
+    await wait(40);
     const darkPlate = token('--plate');
     const darkText = token('--ink');
     const darkDim = token('--ink-dim');
@@ -833,7 +841,10 @@
     ck('收局说明讲了下界', text('#win-note').includes('下界'), text('#win-note'));
     const c = A().state.count;
     clearToast();
-    tapNow(baked.n);
+    // 收局页已经用 showScreen('win') 把盘面换下去，画布是 display:none，指针事件拿到的盒子是
+    // 0×0、depthAt 必为 -1——那里本来就没有"再铲一下"的指针可点。这里走键盘同一条入口
+    // （api.tap → onFlip），验的是"模型已叠好时这一铲要被解释成 already-solved"。
+    A().tap(baked.n);
     await settle();
     eq('叠好之后再铲不加步数', A().state.count, c);
     ck('叠好之后再铲会说话', text('#toast').includes('已经叠好了'), text('#toast'));
@@ -904,7 +915,12 @@
     ck('画布没超出视口', box.right <= vw + 1 && box.left >= -1, `${box.left}..${box.right} vs ${vw}`);
     ck('没有横向溢出', document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, `${document.documentElement.scrollWidth}/${document.documentElement.clientWidth}`);
     ck('geom 与盒一致', Math.abs(g.w - box.width) < 1.5, `${g.w} vs ${box.width}`);
-    ck('高度按 0.72 比例', Math.abs(box.height - g.w * 0.72) < 2, `${box.height} vs ${g.w * 0.72}`);
+    // Two shapes are legal: the 0.72 ratio while the stack's rows still fit the 44px tap floor, and
+    // exactly `geom.need` once they do not (view.measure grows the canvas rather than shrink rows).
+    // Anything else is neither rule; the assertion still pins the exact height, not just a bound.
+    const fitH = Math.max(g.w * 0.72, g.need);
+    ck('高度按 0.72 比例（排不下行距下限时按 geom.need 长高）', Math.abs(box.height - fitH) < 2,
+      `${box.height} vs ${fitH}（0.72=${(g.w * 0.72).toFixed(0)} · need=${g.need}）`);
     ck('画布宽不超过装置上限', g.maxW > 60 && g.x0 + g.maxW <= g.w, `${g.x0}+${g.maxW} of ${g.w}`);
     eq('HUD 五格', document.querySelectorAll('#hud .hud-cell').length, 5);
     let hudBad = 0;

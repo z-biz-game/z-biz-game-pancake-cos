@@ -28,7 +28,7 @@ export function createView(canvas, opts = {}) {
   const listener = opts.onFlip || (() => {});
   const motionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
   let reduce = !!(motionQuery && motionQuery.matches);
-  let geom = { n: 0, burnt: false, rowH: 0, x0: 0, maxW: 0, y0: 0, w: 0, h: 0, dpr: 1 };
+  let geom = { n: 0, burnt: false, rowH: 0, x0: 0, maxW: 0, y0: 0, w: 0, h: 0, need: 0, dpr: 1 };
   let anim = null;
   let flash = null;
   let press = null;
@@ -72,6 +72,9 @@ export function createView(canvas, opts = {}) {
     // grows the canvas instead, so the rows never shrink below MIN_HIT.
     const need = TOP_PAD + BOT_PAD + Math.max(0, geom.n) * MIN_HIT;
     const h = Math.max(200, aspect, need);
+    // What the 44px row floor demands, exposed so the layout gate can check both branches of the
+    // rule ("0.72 ratio when it fits, row floor when it does not") instead of only the first.
+    geom.need = need;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     canvas.style.height = h + 'px';
@@ -115,9 +118,14 @@ export function createView(canvas, opts = {}) {
     if (grain) {
       // The ellipse path is still current, so clip() + fill() puts the pitting on the plate and
       // nowhere else. 'overlay' on a neutral-luminance tile: darks deepen, lights lift, neither
-      // palette tints.
+      // palette tints. The small inner hole keeps platePoint() honest: this plate is translucent
+      // (alpha 0.42), so 'overlay' would mix the tile's own grey into the sampled pixel and the
+      // theme gate would read a colour that is not the --plate token.
       ctx.save();
-      ctx.clip();
+      ctx.beginPath();
+      ctx.ellipse(geom.w / 2, plateY, geom.maxW * 0.62, 11, 0, 0, Math.PI * 2);
+      ctx.ellipse(geom.w / 2, plateY, 6, 4, 0, 0, Math.PI * 2, true);
+      ctx.clip('evenodd');
       ctx.globalCompositeOperation = 'overlay';
       ctx.globalAlpha = 0.55;
       ctx.fillStyle = grain;
@@ -310,23 +318,13 @@ export function createView(canvas, opts = {}) {
     get reduced() {
       return reduce;
     },
+    // 对外的暂停口就是 freeze/resume：主程序只认这一个布尔返回值，内部状态仍只有 `frozen` 一份。
     setPaused(v) {
-      v = !!v;
-      if (v === paused) return paused;
-      paused = v;
-      if (v) {
-        pausedAt = performance.now();
-        if (raf) cancelAnimationFrame(raf);
-        raf = null;                            // 心跳停掉，anim.t 冻结在暂停那一刻
-      } else if (anim) {
-        // 关键：把起算点后移暂停时长，恢复后的 (ts - anim.start) 与暂停前连续 ⇒ 无跳变
-        anim.start += performance.now() - pausedAt;
-        raf = requestAnimationFrame(tick);
-      }
-      return paused;
+      const on = !!v;
+      if (on === frozen) return frozen;
+      if (on) this.freeze(); else this.resume();
+      return frozen;
     },
-    isPaused: () => paused,
-    animProgress: () => (anim ? anim.t : null),
     // True while a flip is mid-air. The gate waits on this instead of on a sleep, so "the animation
     // finished" is an observation and not an assumption about how long rAF takes in headless Chrome.
     get busy() {
@@ -335,10 +333,11 @@ export function createView(canvas, opts = {}) {
     setMotion(off) {
       reduce = !!off;
     },
-    // How far the flip in the air has got, 0..1, or 0 when the stack is at rest. The frame harness
-    // samples this instead of sleeping and hoping the animation is over.
+    // How far the flip in the air has got, 0..1, or null when the stack is at rest. `null` and `0`
+    // are different facts — "no flip in the air" vs "a flip at its first frame" — and the gate reads
+    // the difference to tell "paused before anything moved" from "landed without easing".
     animProgress() {
-      return anim ? anim.t : 0;
+      return anim ? anim.t : null;
     },
     get paused() {
       return frozen;
@@ -402,7 +401,6 @@ export function createView(canvas, opts = {}) {
     },
     // After the model has flipped: run the visual catch-up, then hand control back.
     animateFlip(k, done) {
-      if (paused) { if (done) done(); return; }   // 暂停中直接落定，不排动画
       if (reduce || !k) {
         want();
         if (done) done();
