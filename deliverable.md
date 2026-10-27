@@ -29,7 +29,7 @@ npm start    # node server.cjs
 | 指标 | 读数 |
 | --- | ---: |
 | 跟踪文件 | 61 |
-| 应用代码 | 3,795 行（JS 2,899 / CSS 770 / HTML 126） |
+| 应用代码 | 3,791 行（JS 2,893 / CSS 770 / HTML 128） |
 | 测试/工具文件 | 18 个 |
 | 依赖 | `dependencies` 0 / `devDependencies` 0 |
 | 位图资产（不含 shots） | 13 个 / 563 KB |
